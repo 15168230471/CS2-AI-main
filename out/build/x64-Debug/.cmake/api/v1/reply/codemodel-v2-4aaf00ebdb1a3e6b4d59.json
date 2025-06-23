@@ -1,0 +1,105 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.8"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "CS2-AI",
+					"jsonFile" : "directory-CS2-AI-Debug-ffe5eebafccc9a277d33.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.16"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "CS2-AI",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "CS2-AI"
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1
+					],
+					"name" : "NavmeshPointsaver",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 1,
+					"id" : "CS2_AI::@ff20057d9336c0fea26c",
+					"jsonFile" : "target-CS2_AI-Debug-eb3e922a8179a0ea6097.json",
+					"name" : "CS2_AI",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "CS2_AI_autogen::@ff20057d9336c0fea26c",
+					"jsonFile" : "target-CS2_AI_autogen-Debug-525305fca197a377eea2.json",
+					"name" : "CS2_AI_autogen",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "CS2_AI_autogen_timestamp_deps::@ff20057d9336c0fea26c",
+					"jsonFile" : "target-CS2_AI_autogen_timestamp_deps-Debug-648bb7c2aa641989334e.json",
+					"name" : "CS2_AI_autogen_timestamp_deps",
+					"projectIndex" : 1
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "F:/c#project/CS2-AI-main/out/build/x64-Debug",
+		"source" : "F:/c#project/CS2-AI-main"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 8
+	}
+}

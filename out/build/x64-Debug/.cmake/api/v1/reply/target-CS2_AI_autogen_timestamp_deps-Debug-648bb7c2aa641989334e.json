@@ -1,0 +1,27 @@
+{
+	"backtrace" : 0,
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : 
+		[
+			"CS2-AI/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			}
+		]
+	},
+	"id" : "CS2_AI_autogen_timestamp_deps::@ff20057d9336c0fea26c",
+	"isGeneratorProvided" : true,
+	"name" : "CS2_AI_autogen_timestamp_deps",
+	"paths" : 
+	{
+		"build" : "CS2-AI",
+		"source" : "CS2-AI"
+	},
+	"sources" : [],
+	"type" : "UTILITY"
+}

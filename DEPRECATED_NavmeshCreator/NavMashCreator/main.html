@@ -1,0 +1,25 @@
+<html>
+<body>
+    <div>
+        <button onclick="place_allNodes()"> Place all nodes </button>
+        <label for="selected-node">Selected Node:</label>
+        <input type="text" id="selected-node" value="None" readonly>
+        <label>Operation mode: </label>
+        <input type="radio" id="node-placing" name="operation_mode" value="node_placing" checked>
+        <label for="operation-mode">Node placing</label>
+        <input type="radio" id="edge-creation" name="operation_mode" value="edge_creation" >
+        <label for="css">Edge creation</label><br>
+    </div>
+    <p> 
+        <label for="image-input">Image:</label>
+        <input type="file" id="image-input" onchange="load_image(false)" >
+        <label for="json-input">JSON:</label>
+        <input type="file" id="json-input" onchange="load_file(false)"/>
+        <button onclick="save_created_json()"> Save json </button>
+    </p>
+    <canvas id="myCanvas" width="200" height="100" onclick="on_canvas_click()"></canvas>
+    <image id="testimg" src="#" hidden="true" />
+    <script src="canvas.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
