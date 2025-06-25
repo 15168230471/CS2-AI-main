@@ -13,8 +13,7 @@ void Triggerbot::update(GameInformationhandler* handler)
 	if (!game_info.player_in_crosshair)
 		return;
 
-	if (game_info.player_in_crosshair->team == game_info.controlled_player.team)
-		return;
+
 
 	if ((game_info.player_in_crosshair->health <= 0) || (game_info.player_in_crosshair->health >=200))
 		return;

@@ -25,13 +25,13 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
 		return;
 	}
 
-	if (game_info.player_in_crosshair && (game_info.player_in_crosshair->team != game_info.controlled_player.team))
+	/*if (game_info.player_in_crosshair && (game_info.player_in_crosshair->team != game_info.controlled_player.team))
 	{
 		constexpr int delay_in_ms = 500;
 		game_info_handler->set_player_movement(Movement{});
 		m_delay_time = current_time_ms + delay_in_ms;
 		return;
-	}
+	}*/
 
 	const Vec3D<float> player_pos = game_info.controlled_player.position;
 

@@ -327,11 +327,11 @@
 	"dependencies" : 
 	[
 		{
-			"id" : "CS2_AI_autogen_timestamp_deps::@ff20057d9336c0fea26c"
-		},
-		{
 			"backtrace" : 0,
 			"id" : "CS2_AI_autogen::@ff20057d9336c0fea26c"
+		},
+		{
+			"id" : "CS2_AI_autogen_timestamp_deps::@ff20057d9336c0fea26c"
 		}
 	],
 	"id" : "CS2_AI::@ff20057d9336c0fea26c",

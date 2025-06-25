@@ -1,6 +1,6 @@
 #include "UI/CS2Runner.h"
 
-CS2Runner::CS2Runner(): QObject(nullptr)
+CS2Runner::CS2Runner() : QObject(nullptr)
 {
 	m_cs2_ai_handler = std::make_unique<CS2Ai>();
 	m_cs2_navmesh_points_handler = std::make_unique<NavmeshPoints>(m_cs2_ai_handler->get_game_info_handler());
@@ -11,12 +11,12 @@ CS2Runner::CS2Runner(): QObject(nullptr)
 
 void CS2Runner::run()
 {
-	while (m_is_running) 
+	while (m_is_running)
 	{
 		update();
 		// 1 ms sleep because else activating the behaviors would take too long since the lock is taken all the time
 		// Could be solved by e.g. making the "ActivatedFeatures" atomic but for now the sleep should be enough
-		Sleep(1); 
+		Sleep(1);
 	}
 
 	deleteLater();
@@ -24,8 +24,25 @@ void CS2Runner::run()
 
 void CS2Runner::update()
 {
+	// 获取当前玩家team
+	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
+	int team = game_info.controlled_player.team;
+
+	// 打印当前team值
+	std::cout << "[DEBUG] Current player team: " << team << std::endl;
+
+	if (team == 0) {
+		std::cout << "[DEBUG] You have NOT selected a team yet!" << std::endl;
+	}
+	else if (team == 2) {
+		std::cout << "[DEBUG] You are TERRORIST (T) team." << std::endl;
+	}
+	else if (team == 3) {
+		std::cout << "[DEBUG] You are COUNTER-TERRORIST (CT) team." << std::endl;
+	}
+	
 	std::scoped_lock lock(m_mutex);
-	if(m_mode == ModeRunning::AI)
+	if (m_mode == ModeRunning::AI)
 		m_cs2_ai_handler->update();
 	else if (m_mode == ModeRunning::POINT_CREATOR)
 		m_cs2_navmesh_points_handler->update();

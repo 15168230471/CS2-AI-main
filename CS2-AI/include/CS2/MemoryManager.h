@@ -8,10 +8,12 @@
 #include <string>
 #include <iomanip>
 #include "Utility/Logging.h"
+#include "CS2/Offsets.h"
 
 class MemoryManager
 {
 public:
+	MemoryManager(const Offsets& offs) : m_offsets(offs) {}
 	MemoryManager() = default;
 	~MemoryManager();
 	bool attach_to_process(const char* window_name);
@@ -64,6 +66,7 @@ public:
 	}
 
 private:
+	Offsets m_offsets;
 	HANDLE m_process = nullptr;
 	static constexpr bool debug_print = false;
 };

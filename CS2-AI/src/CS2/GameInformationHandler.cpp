@@ -1,7 +1,5 @@
 #include "CS2/GameInformationHandler.h"
-
 #include <chrono>
-
 #include "Utility/Logging.h"
 #include "CS2/Constants.h"
 
@@ -15,6 +13,10 @@ bool GameInformationhandler::init(const Config& config)
 
 	return m_attached_to_process;
 }
+
+
+
+
 
 bool GameInformationhandler::loadOffsets()
 {
@@ -59,21 +61,21 @@ void GameInformationhandler::set_player_movement(const Movement& movement)
 {
 	// Writing to "offsets.force_forward" etc. seems to not work, therefore spam key events to the CS2 process
 	auto send_key_event = [this](bool value, DWORD key_code)
-	{
-		HWND hwnd = FindWindowA(nullptr, m_config.windowname.c_str());
-		if (!hwnd)
-			return;
+		{
+			HWND hwnd = FindWindowA(nullptr, m_config.windowname.c_str());
+			if (!hwnd)
+				return;
 
-		if (value)
-			PostMessage(hwnd, WM_KEYDOWN, key_code, 0);
-		else
-			PostMessage(hwnd, WM_KEYUP, key_code, 0);
-	};
+			if (value)
+				PostMessage(hwnd, WM_KEYDOWN, key_code, 0);
+			else
+				PostMessage(hwnd, WM_KEYUP, key_code, 0);
+		};
 
 	auto handle_key = [this, send_key_event](bool value, DWORD key_code)
-	{
-		send_key_event(value, key_code);
-	};
+		{
+			send_key_event(value, key_code);
+		};
 
 	constexpr DWORD w_key_code = 0x57;
 	constexpr DWORD s_key_code = 0x53;
@@ -105,7 +107,7 @@ std::optional<PlayerInformation> GameInformationhandler::get_closest_enemy(const
 	{
 		float distance = controlled_player.head_position.distance(enemy.head_position);
 
-		if ((distance <= closest_distance) && (enemy.team != controlled_player.team) && (enemy.health > 0))
+		if ((distance <= closest_distance) &&  (enemy.health > 0))
 		{
 			closest_distance = distance;
 			closest_enemy = enemy;

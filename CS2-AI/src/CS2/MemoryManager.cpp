@@ -1,4 +1,7 @@
 #include "CS2/MemoryManager.h"
+#include "CS2/Offsets.h"
+
+
 
 MemoryManager::~MemoryManager()
 {
