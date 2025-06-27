@@ -38,6 +38,9 @@ public slots:
     void run();
 
 private:
+    const std::chrono::milliseconds m_statusCheckInterval{ 5000 };
+    std::chrono::steady_clock::time_point m_lastStatusCheck{ std::chrono::steady_clock::now() };
+    void checkPlayerStatus();
     std::mutex m_mutex;
     ModeRunning m_mode = ModeRunning::AI;
     bool m_is_running = true;

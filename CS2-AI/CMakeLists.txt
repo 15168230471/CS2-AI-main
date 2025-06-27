@@ -103,13 +103,12 @@ source_group("\\Source Files" FILES "src/main.cpp")
 # Put all other files via regex into the "Other" folder, mainly so that the solution doesn't get cluttered by Qt generated files
 source_group("Other" REGULAR_EXPRESSION "\\.h$|\\.cpp$|\\.stamp$|\\.rule$")
 
-
 add_executable(CS2_AI "src/main.cpp" ${SOURCES} ${HEADERS} ${QT_UI_FILES})
 target_include_directories(CS2_AI PUBLIC "include")
 set_property(TARGET CS2_AI PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT CS2_AI)
 target_link_libraries(CS2_AI Qt6::Widgets)
-
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 add_custom_command(TARGET CS2_AI 
                    POST_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy_directory 

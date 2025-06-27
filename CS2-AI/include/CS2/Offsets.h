@@ -30,7 +30,8 @@ public:
 	uintptr_t current_map;
 	uintptr_t global_vars;
 	uintptr_t network_game_client;
-	uintptr_t signon_state;
+	uintptr_t local_player_weapon;
+
 };
 
 std::optional <Offsets> load_offsets_from_files();

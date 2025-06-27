@@ -1,4 +1,5 @@
 #include "UI/CS2Runner.h"
+#include <windows.h>
 
 CS2Runner::CS2Runner() : QObject(nullptr)
 {
@@ -22,23 +23,45 @@ void CS2Runner::run()
 	deleteLater();
 }
 
-void CS2Runner::update()
+void CS2Runner::checkPlayerStatus()
 {
-	// 获取当前玩家team
 	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
 	int team = game_info.controlled_player.team;
+	std::string mapName = "";
+	std::string weaponName = "";
+	if (weaponName == "") {
+		weaponName = std::string(game_info.player_weapon);
+		std::replace(weaponName.begin(), weaponName.end(), '/', '_');
+		std::cout << "[DEBUG]  Weapon Name:" << std::endl;
+		std::cout << weaponName << std::endl;
+	}
 
-	// 打印当前team值
-	std::cout << "[DEBUG] Current player team: " << team << std::endl;
+	if (mapName == "") {
+		mapName = std::string(game_info.current_map);
+		std::replace(mapName.begin(), mapName.end(), '/', '_');
+	}
 
-	if (team == 0) {
+	std::cout << team << mapName << std::endl;
+	if ((team == 0) && (mapName != "<empty>")) {
 		std::cout << "[DEBUG] You have NOT selected a team yet!" << std::endl;
+		INPUT inputs[2] = {};
+		inputs[0].type = INPUT_KEYBOARD;
+		inputs[0].ki.wVk = '1';
+		inputs[0].ki.dwFlags = 0;
+		inputs[1].type = INPUT_KEYBOARD;
+		inputs[1].ki.wVk = '1';
+		inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+		SendInput(2, inputs, sizeof(INPUT));
 	}
-	else if (team == 2) {
-		std::cout << "[DEBUG] You are TERRORIST (T) team." << std::endl;
-	}
-	else if (team == 3) {
-		std::cout << "[DEBUG] You are COUNTER-TERRORIST (CT) team." << std::endl;
+}
+	
+void CS2Runner::update()
+{
+	
+	auto now = std::chrono::steady_clock::now();
+	if (now - m_lastStatusCheck >= m_statusCheckInterval) {
+		m_lastStatusCheck = now;
+		checkPlayerStatus();
 	}
 	
 	std::scoped_lock lock(m_mutex);

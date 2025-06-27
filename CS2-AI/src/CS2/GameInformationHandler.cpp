@@ -31,12 +31,14 @@ void GameInformationhandler::update_game_information()
 {
 	auto player_controller_address = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.local_player_controller_offset);
 	auto player_pawn_address = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.local_player_pawn);
+	
 
 	m_game_information.controlled_player = read_controlled_player_information(player_controller_address);
 	m_game_information.player_in_crosshair = read_player_in_crosshair(player_controller_address, player_pawn_address);
 	m_game_information.other_players = read_other_players(player_controller_address);
 	m_game_information.closest_enemy_player = get_closest_enemy(m_game_information);
 	read_in_current_map(m_game_information.current_map, std::size(m_game_information.current_map));
+	read_in_player_weapon(m_game_information.player_weapon, std::size(m_game_information.player_weapon));
 }
 
 GameInformation GameInformationhandler::get_game_information() const
@@ -126,6 +128,15 @@ void GameInformationhandler::read_in_current_map(char* buffer, size_t buffer_siz
 
 	m_process_memory.read_string_from_memory(map_name_ptr, buffer, buffer_size);
 }
+void GameInformationhandler::read_in_player_weapon(char* buffer, size_t buffer_size)
+{
+	constexpr uintptr_t global_local_player_weapon = 0x180;
+
+	auto weapon_vars = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.local_player_weapon);
+	auto player_weapon_ptr = m_process_memory.read_memory<uintptr_t>(weapon_vars + global_local_player_weapon);
+
+	m_process_memory.read_string_from_memory(player_weapon_ptr, buffer, buffer_size);
+}
 
 bool GameInformationhandler::read_in_if_controlled_player_is_shooting()
 {
@@ -147,7 +158,7 @@ ControlledPlayer GameInformationhandler::read_controlled_player_information(uint
 	dest.shooting = read_in_if_controlled_player_is_shooting();
 	dest.movement = read_controlled_player_movement(player_address);
 	dest.head_position = get_head_bone_position(local_player_pawn);
-
+	
 	return dest;
 }
 

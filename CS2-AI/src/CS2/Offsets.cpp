@@ -20,8 +20,7 @@ std::optional<Offsets> load_offsets_from_files()
 		auto client_offsets_json = json::parse(client_stream);
 		auto buttons_offsets_json = json::parse(buttons_stream);
 
-		offsets.network_game_client = static_cast<uintptr_t>(general_offsets_json["engine2.dll"]["dwNetworkGameClient"]);
-		offsets.signon_state = static_cast<uintptr_t>(general_offsets_json["engine2.dll"]["dwNetworkGameClient_signOnState"]);
+
 		offsets.entity_listelement_size = 0x10;
 		offsets.local_player_controller_offset = static_cast<uintptr_t>(general_offsets_json["client.dll"]["dwLocalPlayerController"]);
 		offsets.entity_list_start_offset = static_cast<uintptr_t>(general_offsets_json["client.dll"]["dwEntityList"]);
@@ -35,6 +34,7 @@ std::optional<Offsets> load_offsets_from_files()
 		offsets.sceneNode = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BaseEntity"]["fields"]["m_pGameSceneNode"]);
 		offsets.position = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BasePlayerPawn"]["fields"]["m_vOldOrigin"]);
 		offsets.model_state = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["CSkeletonInstance"]["fields"]["m_modelState"]);
+		offsets.local_player_weapon = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["CCSPlayerController_InventoryServices"]["fields"]["m_vecServerAuthoritativeWeaponSlots"]);
 
 		offsets.shots_fired_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawn"]["fields"]["m_iShotsFired"]);
 

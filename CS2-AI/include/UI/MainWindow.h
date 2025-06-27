@@ -27,6 +27,7 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow();
 
+
 private:
     bool all_behavior_checkboxes_checked();
     void update_behavior_executed();

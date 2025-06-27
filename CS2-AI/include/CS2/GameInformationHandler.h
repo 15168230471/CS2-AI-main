@@ -26,6 +26,7 @@ struct ControlledPlayer
 	DWORD shots_fired;
 	int team;
 	int health;
+	
 };
 
 struct PlayerInformation 
@@ -43,6 +44,7 @@ struct GameInformation
 	std::optional<PlayerInformation> player_in_crosshair;
 	std::optional<PlayerInformation> closest_enemy_player;
 	char current_map[64] = "";
+	char player_weapon[64] = "";
 };
 
 class GameInformationhandler
@@ -70,7 +72,9 @@ private:
 	std::optional<PlayerInformation> read_player_in_crosshair(uintptr_t player_controller, uintptr_t player_pawn);
 	std::optional<PlayerInformation> get_closest_enemy(const GameInformation& game_info);
 	void read_in_current_map(char* buffer, size_t buffer_size);
+	void read_in_player_weapon(char* buffer, size_t buffer_size);
 	bool read_in_if_controlled_player_is_shooting();
+	
 
 	bool m_attached_to_process = false;
 	GameInformation m_game_information;
