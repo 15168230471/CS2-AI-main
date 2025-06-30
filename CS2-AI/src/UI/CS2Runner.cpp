@@ -52,6 +52,8 @@ void CS2Runner::checkPlayerStatus()
 		inputs[1].ki.wVk = '1';
 		inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
 		SendInput(2, inputs, sizeof(INPUT));
+		
+	
 	}
 }
 	
