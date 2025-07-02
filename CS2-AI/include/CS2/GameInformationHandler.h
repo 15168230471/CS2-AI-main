@@ -26,6 +26,7 @@ struct ControlledPlayer
 	DWORD shots_fired;
 	int team;
 	int health;
+	bool isImmune;
 	
 };
 
@@ -35,6 +36,8 @@ struct PlayerInformation
 	Vec3D<float> head_position;
 	int team;
 	int health;
+	bool isImmune;
+	
 };
 
 struct GameInformation 

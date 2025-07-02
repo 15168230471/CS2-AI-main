@@ -31,7 +31,7 @@ public:
 	uintptr_t global_vars;
 	uintptr_t network_game_client;
 	uintptr_t local_player_weapon;
-
+	uintptr_t gun_game_immunity;  // ËÀ¶·Ê±ÊÇ·ñÎÞµÐ×´Ì¬
 };
 
 std::optional <Offsets> load_offsets_from_files();

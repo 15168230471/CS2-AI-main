@@ -35,6 +35,8 @@ std::optional<Offsets> load_offsets_from_files()
 		offsets.position = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BasePlayerPawn"]["fields"]["m_vOldOrigin"]);
 		offsets.model_state = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["CSkeletonInstance"]["fields"]["m_modelState"]);
 		offsets.local_player_weapon = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["CCSPlayerController_InventoryServices"]["fields"]["m_vecServerAuthoritativeWeaponSlots"]);
+	
+		offsets.gun_game_immunity =static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawnBase"]["fields"]["m_bGunGameImmunity"]);
 
 		offsets.shots_fired_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawn"]["fields"]["m_iShotsFired"]);
 

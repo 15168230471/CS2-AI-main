@@ -158,6 +158,7 @@ ControlledPlayer GameInformationhandler::read_controlled_player_information(uint
 	dest.shooting = read_in_if_controlled_player_is_shooting();
 	dest.movement = read_controlled_player_movement(player_address);
 	dest.head_position = get_head_bone_position(local_player_pawn);
+	dest.isImmune = m_process_memory.read_memory<uint8_t>(local_player_pawn + m_offsets.gun_game_immunity);
 	
 	return dest;
 }
@@ -243,6 +244,7 @@ std::optional<PlayerInformation> GameInformationhandler::read_player(uintptr_t e
 	ent.health = m_process_memory.read_memory<DWORD>(current_controller + m_offsets.player_health_offset);
 	ent.team = m_process_memory.read_memory<int>(current_controller + m_offsets.team_offset);
 	ent.head_position = get_head_bone_position(current_controller);
+	ent.isImmune = m_process_memory.read_memory<uint8_t>(current_controller + m_offsets.gun_game_immunity);
 	return ent;
 }
 
