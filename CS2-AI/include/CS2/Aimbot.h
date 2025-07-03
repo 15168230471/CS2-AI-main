@@ -32,7 +32,7 @@ private:
 
     // ===== 随机生成 =====
     std::mt19937 m_rng{ std::random_device{}() };
-    std::uniform_real_distribution<float> m_delay_dist{ 800.0f, 2000.0f };  // ms
+    std::uniform_real_distribution<float> m_delay_dist{ 1500.0f, 3000.0f };  // ms
     std::uniform_real_distribution<float> m_jitter_dist{ -0.2f, 0.2f };     // 角度
     std::uniform_real_distribution<float> m_hit_head_dist{ 0.0f, 1.0f };   // 爆头概率分布
 
@@ -60,5 +60,5 @@ namespace {
     constexpr float SPEED_CORRECTION_FACTOR = 0.5f;
 
     // 爆头率
-    constexpr float PROB_HEAD = 0.55f;
+    constexpr float PROB_HEAD = 0.45f;
 }

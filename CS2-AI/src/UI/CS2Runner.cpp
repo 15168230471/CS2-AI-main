@@ -28,8 +28,36 @@ void CS2Runner::checkPlayerStatus()
 	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
 	int team = game_info.controlled_player.team;
 	std::string mapName = "";
-	
+	bool PlayisImmune = game_info.controlled_player.isImmune;
+	uint16_t weaponId = game_info.controlled_player.weaponid;
+	// 新增逻辑：isImmune且weaponId不为6720则依次按B-3-2-ESC
+	if (PlayisImmune == 1 && weaponId != 6720) {
+		// 按键码
+		const WORD keys[] = { 'B', '3', '2', VK_ESCAPE };
+		const int keyCount = 4;
 
+		for (int i = 0; i < keyCount; ++i) {
+			// 按下
+			INPUT keyDown = {};
+			keyDown.type = INPUT_KEYBOARD;
+			keyDown.ki.wVk = keys[i];
+			keyDown.ki.dwFlags = 0;
+			SendInput(1, &keyDown, sizeof(INPUT));
+
+			// 随机短延迟（按住）
+			Sleep(35 + rand() % 40); // 35~75ms
+
+			// 松开
+			INPUT keyUp = {};
+			keyUp.type = INPUT_KEYBOARD;
+			keyUp.ki.wVk = keys[i];
+			keyUp.ki.dwFlags = KEYEVENTF_KEYUP;
+			SendInput(1, &keyUp, sizeof(INPUT));
+
+			// 两个键之间再停一会儿（模拟思考/操作速度）
+			Sleep(75 + rand() % 50); // 75~125ms
+		}
+	}
 	if (mapName == "") {
 		mapName = std::string(game_info.current_map);
 		std::replace(mapName.begin(), mapName.end(), '/', '_');
@@ -40,10 +68,10 @@ void CS2Runner::checkPlayerStatus()
 		std::cout << "[DEBUG] You have NOT selected a team yet!" << std::endl;
 		INPUT inputs[2] = {};
 		inputs[0].type = INPUT_KEYBOARD;
-		inputs[0].ki.wVk = '1';
+		inputs[0].ki.wVk = '2';
 		inputs[0].ki.dwFlags = 0;
 		inputs[1].type = INPUT_KEYBOARD;
-		inputs[1].ki.wVk = '1';
+		inputs[1].ki.wVk = '2';
 		inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
 		SendInput(2, inputs, sizeof(INPUT));
 		
