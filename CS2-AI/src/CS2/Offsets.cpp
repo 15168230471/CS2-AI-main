@@ -34,10 +34,16 @@ std::optional<Offsets> load_offsets_from_files()
 		offsets.sceneNode = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BaseEntity"]["fields"]["m_pGameSceneNode"]);
 		offsets.position = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BasePlayerPawn"]["fields"]["m_vOldOrigin"]);
 		offsets.model_state = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["CSkeletonInstance"]["fields"]["m_modelState"]);
-		offsets.local_player_weapon = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["CCSPlayerController_InventoryServices"]["fields"]["m_vecServerAuthoritativeWeaponSlots"]);
-	
+
 		offsets.gun_game_immunity =static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawnBase"]["fields"]["m_bGunGameImmunity"]);
 
+		offsets.m_pWeaponServices = static_cast<uintptr_t>(
+			client_offsets_json["client.dll"]["classes"]["C_BasePlayerPawn"]["fields"]["m_pWeaponServices"]
+			);
+		offsets.m_hActiveWeapon = static_cast<uintptr_t>(
+			client_offsets_json["client.dll"]["classes"]["CPlayer_WeaponServices"]["fields"]["m_hActiveWeapon"]
+			);
+		
 		offsets.shots_fired_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawn"]["fields"]["m_iShotsFired"]);
 
 		offsets.force_attack = static_cast<uintptr_t>(buttons_offsets_json["client.dll"]["attack"]);

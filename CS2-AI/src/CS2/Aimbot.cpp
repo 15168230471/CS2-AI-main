@@ -84,7 +84,11 @@ void Aimbot::update(GameInformationhandler* info_handler) {
         m_reaction_pending = false;
         return;
     }
-
+    // —— 新增：跳过无敌目标 —— 
+    if (gi.closest_enemy_player->isImmune) {
+        qDebug() << "[Aimbot] target is immune, skipping";
+        return;
+    }
     // 随机决定是否爆头
     float r = m_hit_head_dist(m_rng);
     Vec3D<float> enemy_target_pos;

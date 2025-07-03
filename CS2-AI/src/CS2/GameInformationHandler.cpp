@@ -2,6 +2,7 @@
 #include <chrono>
 #include "Utility/Logging.h"
 #include "CS2/Constants.h"
+#include <iostream>
 
 bool GameInformationhandler::init(const Config& config)
 {
@@ -38,7 +39,7 @@ void GameInformationhandler::update_game_information()
 	m_game_information.other_players = read_other_players(player_controller_address);
 	m_game_information.closest_enemy_player = get_closest_enemy(m_game_information);
 	read_in_current_map(m_game_information.current_map, std::size(m_game_information.current_map));
-	read_in_player_weapon(m_game_information.player_weapon, std::size(m_game_information.player_weapon));
+
 }
 
 GameInformation GameInformationhandler::get_game_information() const
@@ -128,15 +129,7 @@ void GameInformationhandler::read_in_current_map(char* buffer, size_t buffer_siz
 
 	m_process_memory.read_string_from_memory(map_name_ptr, buffer, buffer_size);
 }
-void GameInformationhandler::read_in_player_weapon(char* buffer, size_t buffer_size)
-{
-	constexpr uintptr_t global_local_player_weapon = 0x180;
 
-	auto weapon_vars = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.local_player_weapon);
-	auto player_weapon_ptr = m_process_memory.read_memory<uintptr_t>(weapon_vars + global_local_player_weapon);
-
-	m_process_memory.read_string_from_memory(player_weapon_ptr, buffer, buffer_size);
-}
 
 bool GameInformationhandler::read_in_if_controlled_player_is_shooting()
 {
@@ -158,10 +151,38 @@ ControlledPlayer GameInformationhandler::read_controlled_player_information(uint
 	dest.shooting = read_in_if_controlled_player_is_shooting();
 	dest.movement = read_controlled_player_movement(player_address);
 	dest.head_position = get_head_bone_position(local_player_pawn);
-	dest.isImmune = m_process_memory.read_memory<uint8_t>(local_player_pawn + m_offsets.gun_game_immunity);
+
+	// 2. 获取 WeaponServices 组件指针
+	uintptr_t weapon_services = m_process_memory.read_memory<uintptr_t>(local_player_pawn + m_offsets.m_pWeaponServices);
+	std::cout << "weapon_services: 0x" << std::hex << weapon_services << std::dec << std::endl;
+
+	// 3. 读取 m_hActiveWeapon 句柄
+	uint32_t weapon_handle = m_process_memory.read_memory<uint32_t>(weapon_services + m_offsets.m_hActiveWeapon);
+	std::cout << "weapon_handle: 0x" << std::hex << weapon_handle << std::dec << std::endl;
+
+	// 4. 计算 entity list 索引
+	uint32_t weapon_index = weapon_handle & 0x1FFF;
+	std::cout << "weapon_index: " << weapon_index << std::endl;
+
+	// 5. 获取 entity list 基址
+	uintptr_t entity_list = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.entity_list_start_offset);
+
+	// 6. 分桶算法获取 weapon entity 地址
+	uintptr_t list_entity = m_process_memory.read_memory<uintptr_t>(entity_list + ((8 * (weapon_index >> 9)) + 0x10));
+	uintptr_t weapon_entity = m_process_memory.read_memory<uintptr_t>(list_entity + 0x78 * (weapon_index & 0x1FF));
+	std::cout << "weapon_entity: 0x" << std::hex << weapon_entity << std::dec << std::endl;
+
+	// 7. 读取武器ID
+	uint16_t weapon_id = m_process_memory.read_memory<uint16_t>(weapon_entity + m_offsets.weapon_id_offset);
+	std::cout << "weapon_id (uint16_t): " << weapon_id << std::endl;
+
+
 	
+
+
 	return dest;
 }
+
 
 std::vector<PlayerInformation> GameInformationhandler::read_other_players(uintptr_t player_address)
 {

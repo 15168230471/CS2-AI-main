@@ -8,6 +8,15 @@
 #include "MemoryManager.h"
 #include "ConfigReader.h"
 
+#pragma pack(push, 1)
+struct ServerAuthoritativeWeaponSlot_t {
+	uintptr_t   weaponEntityPtr;  // 指向实体的指针
+	int         slotIndex;        // 槽位索引
+	int         ammoCount;        // 弹药数量
+	float       cooldown;         // 冷却时间
+	// …必要的 padding 或者其他字段…
+};
+#pragma pack(pop)
 struct Movement
 {
 	bool forward = false;
@@ -16,18 +25,19 @@ struct Movement
 	bool right = false;
 };
 
+
 struct ControlledPlayer 
 {
 	Vec2D<float> view_vec;
 	Vec3D<float> position;
 	Vec3D<float> head_position;
 	Movement movement;
+	ServerAuthoritativeWeaponSlot_t weapon_vars_first;
 	DWORD shooting;
 	DWORD shots_fired;
 	int team;
 	int health;
-	bool isImmune;
-	
+
 };
 
 struct PlayerInformation 
@@ -47,7 +57,7 @@ struct GameInformation
 	std::optional<PlayerInformation> player_in_crosshair;
 	std::optional<PlayerInformation> closest_enemy_player;
 	char current_map[64] = "";
-	char player_weapon[64] = "";
+	
 };
 
 class GameInformationhandler
@@ -75,9 +85,8 @@ private:
 	std::optional<PlayerInformation> read_player_in_crosshair(uintptr_t player_controller, uintptr_t player_pawn);
 	std::optional<PlayerInformation> get_closest_enemy(const GameInformation& game_info);
 	void read_in_current_map(char* buffer, size_t buffer_size);
-	void read_in_player_weapon(char* buffer, size_t buffer_size);
 	bool read_in_if_controlled_player_is_shooting();
-	
+	int get_active_weapon_index(uintptr_t local_player_pawn);
 
 	bool m_attached_to_process = false;
 	GameInformation m_game_information;

@@ -28,13 +28,7 @@ void CS2Runner::checkPlayerStatus()
 	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
 	int team = game_info.controlled_player.team;
 	std::string mapName = "";
-	std::string weaponName = "";
-	if (weaponName == "") {
-		weaponName = std::string(game_info.player_weapon);
-		std::replace(weaponName.begin(), weaponName.end(), '/', '_');
-		std::cout << "[DEBUG]  Weapon Name:" << std::endl;
-		std::cout << weaponName << std::endl;
-	}
+	
 
 	if (mapName == "") {
 		mapName = std::string(game_info.current_map);
