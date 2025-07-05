@@ -2,8 +2,8 @@
 #include "Utility/Utility.h"
 #include "Utility/Vec3D.h"
 #include "Utility/json.hpp"
-#include "CS2/GameInformationhandler.h"  // È·ÈÏÏîÄ¿ÖĞµÄÊµ¼ÊÂ·¾¶
-#include "Utility/Logging.h"             // ½öÓÃÓÚ´íÎóÈÕÖ¾
+#include "CS2/GameInformationhandler.h"  // ç¡®è®¤é¡¹ç›®ä¸­çš„å®é™…è·¯å¾„
+#include "Utility/Logging.h"             // ä»…ç”¨äºé”™è¯¯æ—¥å¿—
 #include "Utility/Dijkstra.h"
 #include <algorithm>    // std::replace
 #include <fstream>
@@ -11,33 +11,66 @@
 #include <iostream>     // std::cout
 #include <cfloat>       // FLT_MAX
 #include <cmath>        // std::atan2, M_PI
-
+#include "CS2/Triggerbot.h"
 using nlohmann::json;
+
 
 void MovementStrategy::update(GameInformationhandler* game_info_handler)
 {
     const GameInformation game_info = game_info_handler->get_game_information();
     const auto current_time_ms = get_current_time_in_ms();
-
-    // ¡ª¡ª Ç°ÖÃ¼ì²é & ÈÕÖ¾ ¡ª¡ª 
-    std::cout << "=== MovementStrategy::update ===\n";
-    std::cout << " time_ms=" << current_time_ms
-        << " | delay_time=" << m_delay_time << "\n";
-    std::cout << " map=" << game_info.current_map
-        << " | navmesh_loaded=" << (m_valid_navmesh_loaded ? "yes" : "no") << "\n";
+    auto now = std::chrono::steady_clock::now();
+    //// â€”â€” å‰ç½®æ£€æŸ¥ & æ—¥å¿— â€”â€” 
+    //std::cout << "=== MovementStrategy::update ===\n";
+    //std::cout << " time_ms=" << current_time_ms
+    //    << " | delay_time=" << m_delay_time << "\n";
+    //std::cout << " map=" << game_info.current_map
+    //    << " | navmesh_loaded=" << (m_valid_navmesh_loaded ? "yes" : "no") << "\n";
 
     handle_navmesh_load(game_info.current_map);
     if (!m_valid_navmesh_loaded)
     {
-        std::cout << " Status: NoNavMesh\n\n";
+        /*std::cout << " Status: NoNavMesh\n\n";*/
+        return;
+    }
+    /*std::cout << "[DEBUG] shooting = " << g_just_fired << std::endl;*/
+    if (g_just_fired) {
+        m_last_shoot_time = now;
+        /*std::cout << "[DEBUG] Player is shooting, stop moving." << std::endl;*/
+        g_just_fired = false; // ç”¨å®Œæ¸…é›¶
+        m_next_node = nullptr;
+        game_info_handler->set_player_movement(Movement{});
         return;
     }
 
+    // å¢åŠ å°„å‡»åç¼“å†²åŒº
+    int elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_shoot_time).count();
+    if (elapsed < m_stop_after_shoot_ms) {
+        /*std::cout << "[DEBUG] Player shot recently (" << elapsed << "ms ago), keep stopped." << std::endl;*/
+        m_next_node = nullptr;
+        game_info_handler->set_player_movement(Movement{});
+        //INPUT keyDown = {};
+        //keyDown.type = INPUT_KEYBOARD;
+        //keyDown.ki.wVk = 'R';
+        //keyDown.ki.dwFlags = 0;
+        //SendInput(1, &keyDown, sizeof(INPUT));
+
+        //// éšæœºçŸ­å»¶è¿Ÿï¼ˆæŒ‰ä½ï¼‰
+        //Sleep(35 + rand() % 40); // 35~75ms
+
+        //// æ¾å¼€
+        //INPUT keyUp = {};
+        //keyUp.type = INPUT_KEYBOARD;
+        //keyUp.ki.wVk = 'R';
+        //keyUp.ki.dwFlags = KEYEVENTF_KEYUP;
+        //SendInput(1, &keyUp, sizeof(INPUT));
+        return;
+    }
     if (!game_info.closest_enemy_player)
     {
         m_next_node = nullptr;
         m_delay_time = current_time_ms + 1500;
-        std::cout << " Status: NoEnemy_EnteringDelay\n\n";
+        /*std::cout << " Status: NoEnemy_EnteringDelay\n\n";*/
         return;
     }
 
@@ -45,23 +78,23 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
     {
         m_next_node = nullptr;
         m_delay_time = current_time_ms + 1500;
-        std::cout << " Status: Dead_EnteringDelay\n\n";
+        /*std::cout << " Status: Dead_EnteringDelay\n\n";*/
         return;
     }
 
     if (current_time_ms < m_delay_time)
     {
-        std::cout << " Status: InDelay\n\n";
+        /*std::cout << " Status: InDelay\n\n";*/
         game_info_handler->set_player_movement(Movement{});
         return;
     }
 
-    // ¡ª¡ª Â·¾¶¹ÜÀí ¡ª¡ª 
+    // â€”â€” è·¯å¾„ç®¡ç† â€”â€” 
     const Vec3D<float>& player_pos = game_info.controlled_player.position;
     const Vec3D<float>& enemy_pos = game_info.closest_enemy_player->position;
     constexpr float ARRIVAL_DIST = 15.0f;
 
-    // 1) Ê×´Î»òÉÏÌõÂ·¾¶×ßÍê£ºÑ¡ A, B ²¢¼ÆËãÈ«³Ì
+    // 1) é¦–æ¬¡æˆ–ä¸Šæ¡è·¯å¾„èµ°å®Œï¼šé€‰ A, B å¹¶è®¡ç®—å…¨ç¨‹
     if (!m_next_node)
     {
         auto start_node = get_closest_node_to_position(player_pos);
@@ -75,61 +108,61 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
         }
         else
         {
-            // Ã»Â·¿É×ß
-            std::cout << " Status: NoPath_Stuck\n\n";
+            // æ²¡è·¯å¯èµ°
+            /*std::cout << " Status: NoPath_Stuck\n\n";*/
             game_info_handler->set_player_movement(Movement{});
             return;
         }
     }
 
-    // 2) ¼ÆËãµ½µ±Ç°Ä¿±êµÄ¾àÀë
+    // 2) è®¡ç®—åˆ°å½“å‰ç›®æ ‡çš„è·ç¦»
     float distance = m_next_node->position.distance(player_pos);
-    std::cout << " player_pos=("
+    /*std::cout << " player_pos=("
         << player_pos.x << "," << player_pos.y << "," << player_pos.z << ")\n";
-    std::cout << " distance to next_node(" << m_next_node->id << ")=" << distance << "\n";
+    std::cout << " distance to next_node(" << m_next_node->id << ")=" << distance << "\n";*/
 
-    // ¡ª¡ª ÒÆ¶¯»ò»»µã ¡ª¡ª 
+    // â€”â€” ç§»åŠ¨æˆ–æ¢ç‚¹ â€”â€” 
     Movement mv{};
     std::string status;
 
     if (distance > ARRIVAL_DIST)
     {
-        // ÕıÔÚÏòÄ¿±ê×ß
+        // æ­£åœ¨å‘ç›®æ ‡èµ°
         mv = calculate_move_info(game_info, m_next_node);
         status = "MovingToNode";
     }
     else
     {
-        // µ½´ïµ±Ç°½Úµã£¬ÍÆ½øµ½ÏÂÒ»¸ö
+        // åˆ°è¾¾å½“å‰èŠ‚ç‚¹ï¼Œæ¨è¿›åˆ°ä¸‹ä¸€ä¸ª
         if (m_current_route.size() > 2)
         {
-            // Å×ÆúÒÑµ½´ïµÄÍ·£¬ĞÂµÄ [1] ³ÉÎª next_node
+            // æŠ›å¼ƒå·²åˆ°è¾¾çš„å¤´ï¼Œæ–°çš„ [1] æˆä¸º next_node
             m_current_route.erase(m_current_route.begin());
             m_next_node = m_current_route[1];
             status = "SwitchingNode_to_" + std::to_string(m_next_node->id);
         }
         else
         {
-            // ×îºóÒ»¸ö½ÚµãÒ²µ½´ï£¬Í£ÏÂ²¢Çå¿Õ
+            // æœ€åä¸€ä¸ªèŠ‚ç‚¹ä¹Ÿåˆ°è¾¾ï¼Œåœä¸‹å¹¶æ¸…ç©º
             status = "PathComplete_Stop";
             m_next_node = nullptr;
         }
-        // µ½´ïË²¼äÍ£Ò»Ö¡
+        // åˆ°è¾¾ç¬é—´åœä¸€å¸§
         mv = Movement{};
     }
 
-    // 3) ·¢Ö¸Áî & ´ò×´Ì¬
-    std::cout << " move flags: "
+    // 3) å‘æŒ‡ä»¤ & æ‰“çŠ¶æ€
+    /*std::cout << " move flags: "
         << (mv.forward ? "F" : "_")
         << (mv.backward ? "B" : "_")
         << (mv.left ? "L" : "_")
         << (mv.right ? "R" : "_") << "\n";
-    std::cout << " Status: " << status << "\n\n";
+    std::cout << " Status: " << status << "\n\n";*/
 
     game_info_handler->set_player_movement(mv);
 }
 
-// ÆäÓà·½·¨±£³Ö²»±ä¡­¡­
+// å…¶ä½™æ–¹æ³•ä¿æŒä¸å˜â€¦â€¦
 
 void MovementStrategy::handle_navmesh_load(const std::string& map_name)
 {

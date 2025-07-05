@@ -151,34 +151,35 @@ ControlledPlayer GameInformationhandler::read_controlled_player_information(uint
 	dest.shooting = read_in_if_controlled_player_is_shooting();
 	dest.movement = read_controlled_player_movement(player_address);
 	dest.head_position = get_head_bone_position(local_player_pawn);
+	dest.chest_position = get_chest_bone_position(local_player_pawn);
 	dest.weaponid = get_weapon_id(local_player_pawn);
 	dest.isImmune = m_process_memory.read_memory<uint8_t>(local_player_pawn + m_offsets.gun_game_immunity);
-	std::cout << "PlayisImmune: " << dest.isImmune << std::endl;
+
 	return dest;
 }
 
 uint16_t GameInformationhandler::get_weapon_id(uintptr_t local_player_pawn) {
-	// 1. WeaponServices Ö¸Õë
+	// 1. WeaponServices æŒ‡é’ˆ
 	uintptr_t weapon_services = m_process_memory.read_memory<uintptr_t>(local_player_pawn + m_offsets.m_pWeaponServices);
 
-	// 2. m_hActiveWeapon ¾ä±ú
+	// 2. m_hActiveWeapon å¥æŸ„
 	uint32_t weapon_handle = m_process_memory.read_memory<uint32_t>(weapon_services + m_offsets.m_hActiveWeapon);
 
-	// 3. ¼ÆËã entity list Ë÷Òı
+	// 3. è®¡ç®— entity list ç´¢å¼•
 	uint32_t weapon_index = weapon_handle & 0x1FFF;
 
-	// 4. »ñÈ¡ entity list »ùÖ·
+	// 4. è·å– entity list åŸºå€
 	uintptr_t entity_list = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.entity_list_start_offset);
 
-	// 5. ·ÖÍ°Ëã·¨»ñÈ¡ weapon entity µØÖ·
+	// 5. åˆ†æ¡¶ç®—æ³•è·å– weapon entity åœ°å€
 	uintptr_t list_entity = m_process_memory.read_memory<uintptr_t>(entity_list + ((8 * (weapon_index >> 9)) + 0x10));
 	uintptr_t weapon_entity = m_process_memory.read_memory<uintptr_t>(list_entity + 0x78 * (weapon_index & 0x1FF));
 
-	// 6. ¶ÁÈ¡ÎäÆ÷ID
+	// 6. è¯»å–æ­¦å™¨ID
 	uint16_t weapon_id = m_process_memory.read_memory<uint16_t>(weapon_entity + m_offsets.weapon_id_offset);
 
-	// ¿ÉÑ¡´òÓ¡
-	std::cout << "weapon_id: " << weapon_id << std::endl;
+	// å¯é€‰æ‰“å°
+	/*std::cout << "weapon_id: " << weapon_id << std::endl;*/
 	return weapon_id;
 }
 
@@ -237,6 +238,18 @@ Vec3D<float> GameInformationhandler::get_head_bone_position(uintptr_t player_paw
 
 	return bone;
 }
+Vec3D<float> GameInformationhandler::get_chest_bone_position(uintptr_t player_pawn)
+{
+	constexpr DWORD bone_matrix_offset = 0x80; // è·Ÿå¤´éƒ¨ä¸€è‡´
+	constexpr DWORD chest_bone_index = 0x4;    // Spine/Chestå¸¸è§ç¼–å·ï¼ˆå¯è¯•3/4/2ï¼‰
+	constexpr DWORD matrix_size = 0x20;
+
+	auto game_scene_node = m_process_memory.read_memory<uintptr_t>(player_pawn + m_offsets.sceneNode);
+	auto bone_matrix = m_process_memory.read_memory<uintptr_t>(game_scene_node + m_offsets.model_state + bone_matrix_offset);
+	auto bone = m_process_memory.read_memory<Vec3D<float>>(bone_matrix + (chest_bone_index * matrix_size));
+
+	return bone;
+}
 
 uintptr_t GameInformationhandler::get_list_entity(uintptr_t id, uintptr_t entity_list)
 {
@@ -265,7 +278,10 @@ std::optional<PlayerInformation> GameInformationhandler::read_player(uintptr_t e
 	ent.health = m_process_memory.read_memory<DWORD>(current_controller + m_offsets.player_health_offset);
 	ent.team = m_process_memory.read_memory<int>(current_controller + m_offsets.team_offset);
 	ent.head_position = get_head_bone_position(current_controller);
+	ent.chest_position = get_chest_bone_position(current_controller);
 	ent.isImmune = m_process_memory.read_memory<uint8_t>(current_controller + m_offsets.gun_game_immunity);
+
+
 	return ent;
 }
 
@@ -279,6 +295,5 @@ std::optional<PlayerInformation> GameInformationhandler::read_player_in_crosshai
 	uintptr_t entity_list_start_address = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.entity_list_start_offset);
 	if (!entity_list_start_address)
 		return {};
-
 	return read_player(entity_list_start_address, cross_hair_ID, player_controller);
 }

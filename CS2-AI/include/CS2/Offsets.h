@@ -30,10 +30,10 @@ public:
 	uintptr_t current_map;
 	uintptr_t global_vars;
 	uintptr_t network_game_client;
-	uintptr_t gun_game_immunity;  // ËÀ¶·Ê±ÊÇ·ñÎŞµĞ×´Ì¬
-	uintptr_t m_pWeaponServices;    // Pawn½á¹¹ÌåÀï WeaponServicesÖ¸ÕëµÄÆ«ÒÆ
-	uintptr_t m_hActiveWeapon;      // WeaponServices½á¹¹ÌåÀïµÄ m_hActiveWeapon Æ«ÒÆ
-	uintptr_t weapon_id_offset;     // ÎäÆ÷ÊµÌå½á¹¹ÌåÀïµÄ m_iItemDefinitionIndex Æ«ÒÆ
+	uintptr_t gun_game_immunity;  // æ­»æ–—æ—¶æ˜¯å¦æ— æ•ŒçŠ¶æ€
+	uintptr_t m_pWeaponServices;    // Pawnç»“æ„ä½“é‡Œ WeaponServicesæŒ‡é’ˆçš„åç§»
+	uintptr_t m_hActiveWeapon;      // WeaponServicesç»“æ„ä½“é‡Œçš„ m_hActiveWeapon åç§»
+	uintptr_t weapon_id_offset;     // æ­¦å™¨å®ä½“ç»“æ„ä½“é‡Œçš„ m_iItemDefinitionIndex åç§»
 
 
 };

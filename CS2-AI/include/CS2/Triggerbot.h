@@ -3,14 +3,14 @@
 
 #include "Utility/Utility.h"
 #include "GameInformationHandler.h"
-
+extern volatile bool g_just_fired;
 class Triggerbot
 {
 public:
     void update(GameInformationhandler* handler);
-
+    
 private:
     long long m_delay_time = 0;
-    // ÓÃÓÚ¿ØÖÆÏÂÒ»´Î¿ª»ğµÄÊ±¼äµã
+    // ç”¨äºæ§åˆ¶ä¸‹ä¸€æ¬¡å¼€ç«çš„æ—¶é—´ç‚¹
     std::chrono::steady_clock::time_point m_nextFireTime{ std::chrono::steady_clock::now() };
 };

@@ -4,7 +4,7 @@
 #include "UI/MainWindow.h"
 #include "CS2/CS2AI.h"
 
-// È«¾ÖÔÝÍ£±êÖ¾
+
 volatile bool g_isPaused = false;
 
 int main(int argc, char* argv[])
@@ -15,13 +15,13 @@ int main(int argc, char* argv[])
 
     QTimer keyTimer;
     QObject::connect(&keyTimer, &QTimer::timeout, [&]() {
-        // F8 ÍË³ö
+        
         if (GetAsyncKeyState(VK_F8) & 0x8000) {
             qInfo("F8 pressed, exiting application.");
             app.quit();
         }
 
-        // F7 ÔÝÍ£/»Ö¸´ÇÐ»»
+        
         static bool lastF7 = false;
         bool curF7 = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
         if (curF7 && !lastF7) {

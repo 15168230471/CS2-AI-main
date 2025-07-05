@@ -25,6 +25,7 @@ struct ControlledPlayer
 	Vec2D<float> view_vec;
 	Vec3D<float> position;
 	Vec3D<float> head_position;
+	Vec3D<float> chest_position;
 	Movement movement;
 	DWORD shooting;
 	DWORD shots_fired;
@@ -32,16 +33,19 @@ struct ControlledPlayer
 	int health;
 	bool isImmune;
 	uint16_t weaponid;
+
 };
 
 struct PlayerInformation 
 {
 	Vec3D<float> position;
 	Vec3D<float> head_position;
+	Vec3D<float> chest_position;
 	int team;
 	int health;
 	bool isImmune;
 	
+
 };
 
 
@@ -76,6 +80,7 @@ private:
 	std::vector<PlayerInformation> read_other_players(uintptr_t player_address);
 	Movement read_controlled_player_movement(uintptr_t player_address);
 	Vec3D<float> get_head_bone_position(uintptr_t player_pawn);
+	Vec3D<float> get_chest_bone_position(uintptr_t player_pawn);
 	uintptr_t get_list_entity(uintptr_t id, uintptr_t entity_list);
 	uintptr_t get_entity_controller_or_pawn(uintptr_t list_entity, uintptr_t id);
 	std::optional<PlayerInformation> read_player(uintptr_t entity_list_begin, uintptr_t id, uintptr_t player_address);

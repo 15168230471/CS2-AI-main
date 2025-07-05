@@ -1,96 +1,111 @@
 // CS2/Triggerbot.cpp
 
 #include "CS2/Triggerbot.h"
-#include <Windows.h>    // SendInput, INPUT, etc.
+#include <Windows.h>
 #include <random>
 #include <chrono>
 #include <thread>
 #include <QDebug>
+volatile bool g_just_fired = false;
+// ====== å¯è°ƒå‚æ•°åŒº ======
+namespace TriggerbotHumanizedConfig {
+    // ååº”æˆåŠŸæ¦‚ç‡
+    constexpr float REACT_PROBABILITY = 0.97f;         // 95%æ¦‚ç‡å“åº”
+    // ååº”å»¶è¿ŸèŒƒå›´ï¼ˆæ¯«ç§’ï¼‰
+    constexpr int REACT_DELAY_MIN_MS = 80;             // æœ€ä½ååº”æ—¶é—´
+    constexpr int REACT_DELAY_MAX_MS = 180;            // æœ€é«˜ååº”æ—¶é—´
+    // çŠ¹è±«å†åŠ å»¶è¿Ÿæ¦‚ç‡ä¸èŒƒå›´
+    constexpr float HESITATE_PROB = 0.05f;             // 10%æ¦‚ç‡ç»§ç»­çŠ¹è±«
+    constexpr int HESITATE_MIN_MS = 10;                // çŠ¹è±«æ—¶æœ€å°è¿½åŠ æ—¶é—´
+    constexpr int HESITATE_MAX_MS = 30;               // æœ€å¤§è¿½åŠ æ—¶é—´
+    // é¼ æ ‡ç‚¹å‡»æŒ‰ä½æ—¶é•¿
+    constexpr int HOLD_MIN_MS = 20;
+    constexpr int HOLD_MAX_MS = 50;
+    // ä¸¤æ¬¡ç‚¹å‡»æœ€å°é—´éš”ï¼ˆmsï¼‰
+    constexpr int BASE_FIRE_DELAY_MS = 25;
+    constexpr int VAR_FIRE_DELAY_MIN = -8;
+    constexpr int VAR_FIRE_DELAY_MAX = 15;
+}
 
-// ¡ª¡ª¡ª Ëæ»ú¹¤¾ß ¡ª¡ª¡ª
-
-// È«¾ÖËæ»úÒıÇæ
+// ===== éšæœºå·¥å…·å‡½æ•° =====
 static std::mt19937& rng() {
     static std::random_device rd;
     static std::mt19937 gen(rd());
     return gen;
 }
-
-// ·µ»Ø [min, max] ·¶Î§ÄÚµÄËæ»úÕûÊı
 static int randInt(int min, int max) {
     std::uniform_int_distribution<> dist(min, max);
     return dist(rng());
 }
+static float randProb() {
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    return dist(rng());
+}
 
-// ¡ª¡ª¡ª Ä£Äâ¡°ÈËÀà¡±µã»÷ ¡ª¡ª¡ª
-
-// °´ÏÂ²¢Ëæ»ú¡°°´×¡¡±Ò»¶ÎÊ±¼äºóËÉ¿ª
+// â€”â€”â€” æ‹ŸäººåŒ–é¼ æ ‡ç‚¹å‡» â€”â€”â€”
 static void simulateHumanClick()
 {
     INPUT input = {};
     input.type = INPUT_MOUSE;
-
-    // Êó±ê×ó¼ü°´ÏÂ
+    // é¼ æ ‡å·¦é”®æŒ‰ä¸‹
     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
     SendInput(1, &input, sizeof(input));
 
-    // Ëæ»ú±£³Ö 15¨C30ms£¬ÔÙ°´¼üËÉ¿ª
-    int holdTime = randInt(15, 30);
+    // ä¿æŒä¸€æ®µæ—¶é—´å†æ¾å¼€
+    int holdTime = randInt(TriggerbotHumanizedConfig::HOLD_MIN_MS, TriggerbotHumanizedConfig::HOLD_MAX_MS);
     std::this_thread::sleep_for(std::chrono::milliseconds(holdTime));
 
-    // Êó±ê×ó¼üËÉ¿ª
+    // é¼ æ ‡å·¦é”®æ¾å¼€
     input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
     SendInput(1, &input, sizeof(input));
 }
 
-// ¡ª¡ª¡ª Triggerbot ¸üĞÂÂß¼­ ¡ª¡ª¡ª
-
+// â€”â€”â€” ä¸»é€»è¾‘ â€”â€”â€”
 void Triggerbot::update(GameInformationhandler* handler)
 {
+    using namespace TriggerbotHumanizedConfig;
+
     if (!handler)
         return;
 
     const GameInformation game_info = handler->get_game_information();
 
-    // Èç¹ûÒÑ¾­¿ª¹ıÇ¹»òÍæ¼ÒÒÑËÀ£¬ÔòÌø¹ı
+    // å·²å¼€æªæˆ–å·²æ­»äº¡è·³è¿‡
     if (game_info.controlled_player.shots_fired > 0
         || game_info.controlled_player.health <= 0)
-    {
         return;
-    }
 
-    // ×¼ĞÇÄÚÎŞÍæ¼Ò£¬Ìø¹ı
+    // æ— å‡†æ˜Ÿç›®æ ‡è·³è¿‡
     if (!game_info.player_in_crosshair)
         return;
 
     int  targetHealth = game_info.player_in_crosshair->health;
     bool targetImmune = game_info.player_in_crosshair->isImmune;
-
-    // ´òÓ¡ immune ×´Ì¬
-    qDebug() << "[Triggerbot] targetImmune =" << targetImmune;
-
-    if (targetHealth <= 0
-        || targetHealth >= 200
-        || targetImmune)   // ĞÂÔöÎŞµĞ×´Ì¬¼ì²é
-    {
-        qDebug() << "[Triggerbot] skipping fire: health =" << targetHealth
-            << ", immune =" << targetImmune;
+    if (targetHealth <= 0 || targetHealth >= 200 || targetImmune)
         return;
-    }
 
-    // µ±Ç°¸ß¾«¶ÈÊ±ÖÓ
+    // ååº”æ¦‚ç‡
+    if (randProb() > REACT_PROBABILITY)
+        return;
+
+    // æ‹Ÿäººååº”å»¶è¿Ÿ
+    int reactDelay = randInt(REACT_DELAY_MIN_MS, REACT_DELAY_MAX_MS);
+    std::this_thread::sleep_for(std::chrono::milliseconds(reactDelay));
+
+    // çŠ¹è±«ï¼š10%å†å¤šç­‰ä¸€ä¼š
+    if (randProb() < HESITATE_PROB)
+        std::this_thread::sleep_for(std::chrono::milliseconds(randInt(HESITATE_MIN_MS, HESITATE_MAX_MS)));
+
     auto now = std::chrono::steady_clock::now();
 
-    // »ù´¡ÑÓ³Ù 20ms£¬¡À5ms Ëæ»ú»¯
-    constexpr int baseDelay = 20;
-    int variableDelay = baseDelay + randInt(-5, 5);  // 15¨C25ms
+    // ç‚¹å‡»é—´éš”
+    static auto m_nextFireTime = std::chrono::steady_clock::now();
+    int fireDelay = BASE_FIRE_DELAY_MS + randInt(VAR_FIRE_DELAY_MIN, VAR_FIRE_DELAY_MAX);
 
-    // Èç¹ûµ½´ïÏÂÒ»´Î¿É¿ª»ğÊ±¼ä
     if (now >= m_nextFireTime)
     {
         simulateHumanClick();
-
-        // ¼ÆËãÏÂÒ»´Î¿É¿ª»ğÊ±¼ä£¬·ÀÖ¹¶àÁ¬µã
-        m_nextFireTime = now + std::chrono::milliseconds(variableDelay);
+        m_nextFireTime = now + std::chrono::milliseconds(fireDelay);
+        g_just_fired = true;
     }
 }

@@ -6,37 +6,41 @@
 #include <cmath>
 #include <random>
 #include "GameInformationhandler.h"
+#include <unordered_map>
+
+
 
 class Aimbot {
 public:
     void update(GameInformationhandler* info_handler);
 
+    
 private:
-    // Êó±êÒÆ¶¯
+    // é¼ æ ‡ç§»åŠ¨
     void move_mouse(float dx, float dy);
-    // ¼ÆËã¸©ÑöÓëÆ«º½ÒÔÃé×¼Ö¸¶¨Î»ÖÃ
+    // è®¡ç®—ä¿¯ä»°ä¸åèˆªä»¥ç„å‡†æŒ‡å®šä½ç½®
     Vec2D<float> calc_view_vec_aim_to_head(const Vec3D<float>& player_head,
         const Vec3D<float>& target_pos);
-    // Ä¿±êÔË¶¯Ô¤²â
+    // ç›®æ ‡è¿åŠ¨é¢„æµ‹
     Vec2D<float> predictTarget(float tgtX, float tgtY);
 
-    // ===== SMOOTH ÂË²¨×´Ì¬ =====
+    // ===== SMOOTH æ»¤æ³¢çŠ¶æ€ =====
     float m_smoothed_dx = 0.0f;
     float m_smoothed_dy = 0.0f;
     std::chrono::steady_clock::time_point m_last_time = std::chrono::steady_clock::now();
 
-    // ===== ·´Ó¦ÑÓ³Ù =====
+    // ===== ååº”å»¶è¿Ÿ =====
     bool   m_reaction_pending = false;
     float  m_reaction_delay_ms = 0.0f;
     double m_reaction_start = 0.0;
 
-    // ===== Ëæ»úÉú³É =====
+    // ===== éšæœºç”Ÿæˆ =====
     std::mt19937 m_rng{ std::random_device{}() };
-    std::uniform_real_distribution<float> m_delay_dist{ 1500.0f, 3000.0f };  // ms
-    std::uniform_real_distribution<float> m_jitter_dist{ -0.2f, 0.2f };     // ½Ç¶È
-    std::uniform_real_distribution<float> m_hit_head_dist{ 0.0f, 1.0f };   // ±¬Í·¸ÅÂÊ·Ö²¼
+    std::uniform_real_distribution<float> m_delay_dist{ 2000.0f, 3000.0f };  // ms
+    std::uniform_real_distribution<float> m_jitter_dist{ 0.0f, 0.0f };     // è§’åº¦
+    std::uniform_real_distribution<float> m_hit_head_dist{ 0.0f, 1.0f };   // çˆ†å¤´æ¦‚ç‡åˆ†å¸ƒ
 
-    // ===== Ô¤²âÏà¹Ø×´Ì¬ =====
+    // ===== é¢„æµ‹ç›¸å…³çŠ¶æ€ =====
     float m_prevTargetX = 0.0f;
     float m_prevTargetY = 0.0f;
     float m_prevVelX = 0.0f;
@@ -45,20 +49,20 @@ private:
     std::chrono::steady_clock::time_point m_prevTime = std::chrono::steady_clock::now();
 };
 
-// ¿Éµ÷²ÎÊı
+// å¯è°ƒå‚æ•°
 namespace {
-    constexpr float FAST_ENTER_THRESHOLD = 3.0f;
-    constexpr float FAST_MAX_ENTER_THRESHOLD = 150.0f;
+    constexpr float FAST_ENTER_THRESHOLD = 0.3f;
+    constexpr float FAST_MAX_ENTER_THRESHOLD = 130.0f;
     constexpr float FAST_MAX_STEP = 10.0f;
     constexpr float FAST_SENSITIVITY = 20.0f;
 
-    constexpr float SMOOTHING_TIME = 0.1f;
+    constexpr float SMOOTHING_TIME = 0.13f;
     constexpr float MOUSE_SENSITIVITY = 20.0f;
-    constexpr float MAX_STEP = 1.0f;
+    constexpr float MAX_STEP = 1.2f;
 
-    constexpr float PREDICTION_INTERVAL = 3.0f;
-    constexpr float SPEED_CORRECTION_FACTOR = 0.5f;
+    constexpr float PREDICTION_INTERVAL = 0.12f;
+    constexpr float SPEED_CORRECTION_FACTOR = 0.0f;
 
-    // ±¬Í·ÂÊ
-    constexpr float PROB_HEAD = 0.45f;
+    // çˆ†å¤´ç‡
+    constexpr float PROB_HEAD =0.9f;
 }

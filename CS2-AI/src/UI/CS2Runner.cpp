@@ -23,41 +23,11 @@ void CS2Runner::run()
 	deleteLater();
 }
 
-void CS2Runner::checkPlayerStatus()
+void CS2Runner::check_map_team_Status()
 {
 	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
 	int team = game_info.controlled_player.team;
 	std::string mapName = "";
-	bool PlayisImmune = game_info.controlled_player.isImmune;
-	uint16_t weaponId = game_info.controlled_player.weaponid;
-	// ĞÂÔöÂß¼­£ºisImmuneÇÒweaponId²»Îª6720ÔòÒÀ´Î°´B-3-2-ESC
-	if (PlayisImmune == 1 && weaponId != 6720) {
-		// °´¼üÂë
-		const WORD keys[] = { 'B', '3', '2', VK_ESCAPE };
-		const int keyCount = 4;
-
-		for (int i = 0; i < keyCount; ++i) {
-			// °´ÏÂ
-			INPUT keyDown = {};
-			keyDown.type = INPUT_KEYBOARD;
-			keyDown.ki.wVk = keys[i];
-			keyDown.ki.dwFlags = 0;
-			SendInput(1, &keyDown, sizeof(INPUT));
-
-			// Ëæ»ú¶ÌÑÓ³Ù£¨°´×¡£©
-			Sleep(35 + rand() % 40); // 35~75ms
-
-			// ËÉ¿ª
-			INPUT keyUp = {};
-			keyUp.type = INPUT_KEYBOARD;
-			keyUp.ki.wVk = keys[i];
-			keyUp.ki.dwFlags = KEYEVENTF_KEYUP;
-			SendInput(1, &keyUp, sizeof(INPUT));
-
-			// Á½¸ö¼üÖ®¼äÔÙÍ£Ò»»á¶ù£¨Ä£ÄâË¼¿¼/²Ù×÷ËÙ¶È£©
-			Sleep(75 + rand() % 50); // 75~125ms
-		}
-	}
 	if (mapName == "") {
 		mapName = std::string(game_info.current_map);
 		std::replace(mapName.begin(), mapName.end(), '/', '_');
@@ -74,8 +44,69 @@ void CS2Runner::checkPlayerStatus()
 		inputs[1].ki.wVk = '2';
 		inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
 		SendInput(2, inputs, sizeof(INPUT));
-		
+	}
+}
+
+void CS2Runner::check_weapon_Status()
+{
+	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
+	bool PlayisImmune = game_info.controlled_player.isImmune;
+	uint16_t weaponId = game_info.controlled_player.weaponid;
+	int health = game_info.controlled_player.health;
+
+	// é™æ€å˜é‡è®°å½•ä¸Šæ¬¡ä¸æ— æ•Œæ—¶åˆ»ï¼ˆå•ä½msï¼‰
+	static DWORD last_not_immune_tick = GetTickCount();
+	static bool   last_key_triggered = false;
+
+	DWORD now = GetTickCount();
+
+	/*std::cout << "PlayisImmune" << PlayisImmune << std::endl;
+	std::cout << weaponId << std::endl;
+	std::cout << "health" << health << std::endl;
+	std::cout << now << std::endl;
+	std::cout << last_key_triggered << std::endl;
+	std::cout << last_not_immune_tick << std::endl;*/
 	
+	// æ»¡è¶³æ¡ä»¶æ—¶ä¸”æ²¡è§¦å‘è¿‡
+	if (!last_key_triggered
+		&& (now - last_not_immune_tick >10000)
+		&& PlayisImmune == 1
+		&& weaponId != 6720
+		&& health != 0)
+	{
+		
+		// æŒ‰é”®ç 
+		const WORD keys[] = { 'B', '3', '2', VK_ESCAPE };
+		const int keyCount = 4;
+
+		for (int i = 0; i < keyCount; ++i) {
+			// æŒ‰ä¸‹
+			INPUT keyDown = {};
+			keyDown.type = INPUT_KEYBOARD;
+			keyDown.ki.wVk = keys[i];
+			keyDown.ki.dwFlags = 0;
+			SendInput(1, &keyDown, sizeof(INPUT));
+
+			// çŸ­å»¶è¿Ÿï¼ˆæ¨¡æ‹ŸçœŸäººæŒ‰é”®ï¼‰
+			Sleep(35 + rand() % 40); // 35~75ms
+
+			// æ¾å¼€
+			INPUT keyUp = {};
+			keyUp.type = INPUT_KEYBOARD;
+			keyUp.ki.wVk = keys[i];
+			keyUp.ki.dwFlags = KEYEVENTF_KEYUP;
+			SendInput(1, &keyUp, sizeof(INPUT));
+
+			Sleep(75 + rand() % 50); // 75~125ms
+		}
+		last_not_immune_tick = now;
+		last_key_triggered = true;  // æ ‡è®°æœ¬æ¬¡å·²è§¦å‘ï¼Œ10ç§’å†…ä¸å†è§¦å‘
+		std::cout << "[DEBUG] buy weapon once!" << std::endl;
+	}
+	// å¦‚æœå½“å‰å¤„äºéæ— æ•ŒçŠ¶æ€ï¼Œæ›´æ–°æ—¶é—´æˆ³ï¼Œå¹¶å…è®¸ä¸‹æ¬¡è§¦å‘
+	if ( weaponId == 6720 ) {
+		last_not_immune_tick = now;   // åªè¦ä½ å˜æˆæ— æ•Œ æˆ– æ‹¿äº†6720 æˆ–æ­»äº¡ï¼Œtickåˆ·æ–°
+		last_key_triggered = false;   // å…è®¸å†æ¬¡è§¦å‘
 	}
 }
 	
@@ -85,9 +116,9 @@ void CS2Runner::update()
 	auto now = std::chrono::steady_clock::now();
 	if (now - m_lastStatusCheck >= m_statusCheckInterval) {
 		m_lastStatusCheck = now;
-		checkPlayerStatus();
+		check_map_team_Status();
 	}
-	
+	check_weapon_Status();
 	std::scoped_lock lock(m_mutex);
 	if (m_mode == ModeRunning::AI)
 		m_cs2_ai_handler->update();

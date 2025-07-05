@@ -33,7 +33,8 @@ private:
 	void load_nodes(const json& json);
 	void load_edges(const json& json);
 	std::shared_ptr<Node> get_closest_node_to_position(const Vec3D<float>& position);
-
+	std::chrono::steady_clock::time_point m_last_shoot_time = std::chrono::steady_clock::now();
+	int m_stop_after_shoot_ms = 0; // 射击后多久恢复移动，单位ms，可调
 	json m_navmesh_json;
 	std::vector<std::shared_ptr<Node>> m_nodes;
 	std::shared_ptr<Node> m_next_node = nullptr;
