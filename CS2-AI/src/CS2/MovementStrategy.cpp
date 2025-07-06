@@ -166,13 +166,14 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
 
 void MovementStrategy::handle_navmesh_load(const std::string& map_name)
 {
-    if (map_name == m_loaded_map) return;
-    if (map_name.empty())
-    {
+    // 过滤掉常见无效地图名和空字符串
+    static const std::vector<std::string> invalid_maps = { "", "SNDLVL_35dB" };
+    if (std::find(invalid_maps.begin(), invalid_maps.end(), map_name) != invalid_maps.end()) {
         m_loaded_map.clear();
         m_valid_navmesh_loaded = false;
         return;
     }
+    if (map_name == m_loaded_map) return;
     m_loaded_map = map_name;
     std::string processed = map_name;
     std::replace(processed.begin(), processed.end(), '/', '_');
@@ -183,10 +184,17 @@ void MovementStrategy::handle_navmesh_load(const std::string& map_name)
         m_valid_navmesh_loaded = false;
 }
 
+
 bool MovementStrategy::load_in_navmesh(const std::string& filename)
 {
     try
     {
+        // 加载新文件前，清空旧内容
+        m_nodes.clear();
+        // 如果有 m_edges/m_current_route，也一并清空
+        m_current_route.clear();
+        m_next_node = nullptr;
+
         std::ifstream ifs(filename);
         m_navmesh_json = json::parse(ifs);
         ifs.close();
@@ -200,6 +208,7 @@ bool MovementStrategy::load_in_navmesh(const std::string& filename)
     }
     return true;
 }
+
 
 void MovementStrategy::set_debug_print_route(bool value)
 {
