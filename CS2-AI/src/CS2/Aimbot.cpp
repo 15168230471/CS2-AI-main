@@ -80,25 +80,90 @@ void Aimbot::update(GameInformationhandler* info_handler) {
         return;
 
     GameInformation gi = info_handler->get_game_information();
-    if (!gi.closest_enemy_player) {
-        m_reaction_pending = false;
+
+    // 死亡/重生时重置
+    if (gi.controlled_player.health <= 0) {
+        m_last_health = -1;
+        m_injured_ticks = 0;
         return;
     }
-    //// —— 新增：跳过无敌目标 —— 
-    //if (gi.closest_enemy_player->isImmune) {
-    //    qDebug() << "[Aimbot] target is immune, skipping";
-    //    return;
-    //}
-    // 随机决定是否爆头
+
+    // ------ 检查是否刚刚受伤 ------
+    bool just_injured = false;
+    if (m_last_health != -1 && gi.controlled_player.health < m_last_health) {
+        m_injured_ticks = INJURED_MEMORY_FRAMES; // 每次掉血刷新受伤记忆
+        just_injured = true;
+        /*std::cout << "[Aimbot] Got injured! Injured ticks set: " << m_injured_ticks << std::endl;*/
+    }
+    else if (m_injured_ticks > 0) {
+        m_injured_ticks--;
+    }
+    m_last_health = gi.controlled_player.health;
+
+    // ------ 寻找目标 ------
+    const PlayerInformation* target_enemy = nullptr;
+    float min_dist_firing = std::numeric_limits<float>::max();
+    const PlayerInformation* firing_enemy = nullptr;
+
+    for (const auto& enemy : gi.other_players) {
+        if (enemy.health <= 0) continue;
+        uintptr_t id = enemy.pawn_addr;
+
+        // 记录 shots_fired 记忆
+        DWORD prev_shots = m_prev_enemy_shots_fired[id];
+        if (enemy.shots_fired > prev_shots || enemy.shots_fired > 0) {
+            m_enemy_fire_ticks[id] = FIRE_MEMORY_FRAMES;
+            /*if (enemy.shots_fired > prev_shots)
+                std::cout << "[Aimbot] id=" << id << " | shots_fired INCREASE! (" << prev_shots << "->" << enemy.shots_fired << "), set fire_ticks=" << FIRE_MEMORY_FRAMES << std::endl;*/
+        }
+        else if (m_enemy_fire_ticks[id] > 0) {
+            m_enemy_fire_ticks[id]--;
+        }
+        m_prev_enemy_shots_fired[id] = enemy.shots_fired;
+
+        float dist = gi.controlled_player.position.distance(enemy.position);
+
+        // 找出最近的正在开火敌人
+        if (enemy.shots_fired > 0 || m_enemy_fire_ticks[id] > 0) {
+            if (dist < min_dist_firing) {
+                min_dist_firing = dist;
+                firing_enemy = &enemy;
+            }
+        }
+
+        //// 可选：打印所有敌人的状态
+        //std::cout << "[Aimbot] id=" << id
+        //    << " | shots_fired=" << enemy.shots_fired
+        //    << " | fire_ticks=" << m_enemy_fire_ticks[id]
+        //    << " | dist=" << dist
+        //    << std::endl;
+    }
+
+    // ------ 目标选择 ------
+    // 优先：受伤后的记忆期内，盯着正在开火的最近敌人
+    if (m_injured_ticks > 0 && firing_enemy) {
+        target_enemy = firing_enemy;
+        /*std::cout << "[Aimbot] Picked firing_enemy id=" << firing_enemy->pawn_addr
+            << " (after injury), m_enemy_fire_ticks="
+            << m_enemy_fire_ticks[firing_enemy->pawn_addr] << std::endl;*/
+    }
+    // 正常情况：最近的敌人
+    else if (gi.closest_enemy_player) {
+        target_enemy = &(*gi.closest_enemy_player);
+        /*std::cout << "[Aimbot] Picked closest_enemy id=" << gi.closest_enemy_player->pawn_addr 
+            << " closest_enemy  m_enemy_fire_ticks=" << m_enemy_fire_ticks[target_enemy->pawn_addr] << std::endl;*/
+    }
+
+    if (!target_enemy)
+        return;
+
+
+
+    // 瞄准逻辑
     float r = m_hit_head_dist(m_rng);
-    Vec3D<float> enemy_target_pos;
-    if (r < PROB_HEAD) {
-        enemy_target_pos = gi.closest_enemy_player->chest_position;
-    }
-    else {
-        // 30% 随机瞄向玩家中心
-        enemy_target_pos = gi.closest_enemy_player->position;
-    }
+    Vec3D<float> enemy_target_pos = (r < PROB_HEAD)
+        ? target_enemy->chest_position
+        : target_enemy->position;
 
     Vec3D<float> my_head = gi.controlled_player.head_position;
     Vec2D<float> target = calc_view_vec_aim_to_head(my_head, enemy_target_pos);
@@ -113,6 +178,8 @@ void Aimbot::update(GameInformationhandler* info_handler) {
 
     auto now_tp = std::chrono::steady_clock::now();
     double now_ms = std::chrono::duration<double, std::milli>(now_tp.time_since_epoch()).count();
+
+
 
     // 反应延迟
     if (!m_reaction_pending) {

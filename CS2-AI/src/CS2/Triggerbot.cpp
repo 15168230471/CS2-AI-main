@@ -7,24 +7,23 @@
 #include <thread>
 #include <QDebug>
 volatile bool g_just_fired = false;
+
 // ====== 可调参数区 ======
 namespace TriggerbotHumanizedConfig {
-    // 反应成功概率
-    constexpr float REACT_PROBABILITY = 0.97f;         // 95%概率响应
-    // 反应延迟范围（毫秒）
-    constexpr int REACT_DELAY_MIN_MS = 80;             // 最低反应时间
-    constexpr int REACT_DELAY_MAX_MS = 180;            // 最高反应时间
-    // 犹豫再加延迟概率与范围
-    constexpr float HESITATE_PROB = 0.05f;             // 10%概率继续犹豫
-    constexpr int HESITATE_MIN_MS = 10;                // 犹豫时最小追加时间
-    constexpr int HESITATE_MAX_MS = 30;               // 最大追加时间
-    // 鼠标点击按住时长
+    constexpr float REACT_PROBABILITY = 0.97f;
+    constexpr int REACT_DELAY_MIN_MS = 60;
+    constexpr int REACT_DELAY_MAX_MS = 100;
+    constexpr float HESITATE_PROB = 0.05f;
+    constexpr int HESITATE_MIN_MS = 5;
+    constexpr int HESITATE_MAX_MS = 20;
     constexpr int HOLD_MIN_MS = 20;
     constexpr int HOLD_MAX_MS = 50;
-    // 两次点击最小间隔（ms）
-    constexpr int BASE_FIRE_DELAY_MS = 25;
-    constexpr int VAR_FIRE_DELAY_MIN = -8;
-    constexpr int VAR_FIRE_DELAY_MAX = 15;
+    constexpr int BASE_FIRE_DELAY_MS = 350;
+    constexpr int VAR_FIRE_DELAY_MIN = 0;
+    constexpr int VAR_FIRE_DELAY_MAX = 100;
+    // 新增：近距离定义
+    constexpr float CLOSE_DIST_THRESHOLD = 1000.0f;
+    constexpr int CLOSE_REACT_DELAY_MS = 10;
 }
 
 // ===== 随机工具函数 =====
@@ -47,15 +46,12 @@ static void simulateHumanClick()
 {
     INPUT input = {};
     input.type = INPUT_MOUSE;
-    // 鼠标左键按下
     input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
     SendInput(1, &input, sizeof(input));
 
-    // 保持一段时间再松开
     int holdTime = randInt(TriggerbotHumanizedConfig::HOLD_MIN_MS, TriggerbotHumanizedConfig::HOLD_MAX_MS);
     std::this_thread::sleep_for(std::chrono::milliseconds(holdTime));
 
-    // 鼠标左键松开
     input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
     SendInput(1, &input, sizeof(input));
 }
@@ -63,19 +59,45 @@ static void simulateHumanClick()
 // ——— 主逻辑 ———
 void Triggerbot::update(GameInformationhandler* handler)
 {
+
     using namespace TriggerbotHumanizedConfig;
+
 
     if (!handler)
         return;
 
     const GameInformation game_info = handler->get_game_information();
+    // ========== 自动装弹逻辑 ==========
+    // 假设gi.controlled_player.weapon_info.ammo_clip1 有弹夹数
+    constexpr int RELOAD_THRESHOLD = 2;
+    int ammo = game_info.controlled_player.weapon_info.ammo_clip1;
+    bool has_target = bool(game_info.player_in_crosshair);
+    int myhealth = game_info.controlled_player.health;
+    // 每帧都打印这些关键数据
+    /*qDebug() << "[Triggerbot] ammo=" << ammo
+        << " RELOAD_THRESHOLD=" << RELOAD_THRESHOLD
+        << " player_in_crosshair=" << (has_target ? "YES" : "NO")
+        << " health=" << myhealth;*/
+    // 没敌人/准星没目标/弹夹少，且未死亡时自动装弹
+    if (!game_info.player_in_crosshair
+        && ammo > -1 && ammo <= RELOAD_THRESHOLD
+        && game_info.controlled_player.health > 0)
+    {
+        // 按下R（VK_R = 0x52）
+        INPUT input = {};
+        input.type = INPUT_KEYBOARD;
+        input.ki.wVk = 'R';
+        SendInput(1, &input, sizeof(INPUT));
+        // 松开
+        input.ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(1, &input, sizeof(INPUT));
+        /*qDebug() << "[Triggerbot] 自动装弹! 弹夹剩余:" << ammo;*/
+    }
 
-    // 已开枪或已死亡跳过
     if (game_info.controlled_player.shots_fired > 0
         || game_info.controlled_player.health <= 0)
         return;
 
-    // 无准星目标跳过
     if (!game_info.player_in_crosshair)
         return;
 
@@ -84,21 +106,27 @@ void Triggerbot::update(GameInformationhandler* handler)
     if (targetHealth <= 0 || targetHealth >= 200 || targetImmune)
         return;
 
-    // 反应概率
     if (randProb() > REACT_PROBABILITY)
         return;
 
-    // 拟人反应延迟
-    int reactDelay = randInt(REACT_DELAY_MIN_MS, REACT_DELAY_MAX_MS);
+    // ========== 近距离优先快速反应 ==========
+    float dist = game_info.controlled_player.position.distance(game_info.player_in_crosshair->position);
+    int reactDelay;
+    if (dist < CLOSE_DIST_THRESHOLD) {
+        reactDelay = CLOSE_REACT_DELAY_MS;
+        qDebug() << "[Triggerbot] Close enemy! dist=" << dist << "reactDelay=" << reactDelay;
+    }
+    else {
+        reactDelay = randInt(REACT_DELAY_MIN_MS, REACT_DELAY_MAX_MS);
+        qDebug() << "[Triggerbot] Normal dist=" << dist << "reactDelay=" << reactDelay;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(reactDelay));
 
-    // 犹豫：10%再多等一会
+    // 犹豫
     if (randProb() < HESITATE_PROB)
         std::this_thread::sleep_for(std::chrono::milliseconds(randInt(HESITATE_MIN_MS, HESITATE_MAX_MS)));
 
     auto now = std::chrono::steady_clock::now();
-
-    // 点击间隔
     static auto m_nextFireTime = std::chrono::steady_clock::now();
     int fireDelay = BASE_FIRE_DELAY_MS + randInt(VAR_FIRE_DELAY_MIN, VAR_FIRE_DELAY_MAX);
 
@@ -108,4 +136,6 @@ void Triggerbot::update(GameInformationhandler* handler)
         m_nextFireTime = now + std::chrono::milliseconds(fireDelay);
         g_just_fired = true;
     }
+    
+    
 }

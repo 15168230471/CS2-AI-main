@@ -43,7 +43,10 @@ std::optional<Offsets> load_offsets_from_files()
 		offsets.m_hActiveWeapon = static_cast<uintptr_t>(
 			client_offsets_json["client.dll"]["classes"]["CPlayer_WeaponServices"]["fields"]["m_hActiveWeapon"]
 			);
-		
+		offsets.m_iClip1 = static_cast<uintptr_t>(
+			client_offsets_json["client.dll"]["classes"]["C_BasePlayerWeapon"]["fields"]["m_iClip1"]
+			);
+
 		offsets.shots_fired_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawn"]["fields"]["m_iShotsFired"]);
 
 		offsets.force_attack = static_cast<uintptr_t>(buttons_offsets_json["client.dll"]["attack"]);

@@ -20,87 +20,50 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
     const GameInformation game_info = game_info_handler->get_game_information();
     const auto current_time_ms = get_current_time_in_ms();
     auto now = std::chrono::steady_clock::now();
-    //// —— 前置检查 & 日志 —— 
-    //std::cout << "=== MovementStrategy::update ===\n";
-    //std::cout << " time_ms=" << current_time_ms
-    //    << " | delay_time=" << m_delay_time << "\n";
-    //std::cout << " map=" << game_info.current_map
-    //    << " | navmesh_loaded=" << (m_valid_navmesh_loaded ? "yes" : "no") << "\n";
 
     handle_navmesh_load(game_info.current_map);
     if (!m_valid_navmesh_loaded)
-    {
-        /*std::cout << " Status: NoNavMesh\n\n";*/
         return;
-    }
-    /*std::cout << "[DEBUG] shooting = " << g_just_fired << std::endl;*/
+
     if (g_just_fired) {
         m_last_shoot_time = now;
-        /*std::cout << "[DEBUG] Player is shooting, stop moving." << std::endl;*/
-        g_just_fired = false; // 用完清零
+        g_just_fired = false;
         m_next_node = nullptr;
         game_info_handler->set_player_movement(Movement{});
         return;
     }
 
-    // 增加射击后缓冲区
     int elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_shoot_time).count();
     if (elapsed < m_stop_after_shoot_ms) {
-        /*std::cout << "[DEBUG] Player shot recently (" << elapsed << "ms ago), keep stopped." << std::endl;*/
         m_next_node = nullptr;
         game_info_handler->set_player_movement(Movement{});
-        //INPUT keyDown = {};
-        //keyDown.type = INPUT_KEYBOARD;
-        //keyDown.ki.wVk = 'R';
-        //keyDown.ki.dwFlags = 0;
-        //SendInput(1, &keyDown, sizeof(INPUT));
-
-        //// 随机短延迟（按住）
-        //Sleep(35 + rand() % 40); // 35~75ms
-
-        //// 松开
-        //INPUT keyUp = {};
-        //keyUp.type = INPUT_KEYBOARD;
-        //keyUp.ki.wVk = 'R';
-        //keyUp.ki.dwFlags = KEYEVENTF_KEYUP;
-        //SendInput(1, &keyUp, sizeof(INPUT));
         return;
     }
-    if (!game_info.closest_enemy_player)
-    {
+    if (!game_info.closest_enemy_player) {
         m_next_node = nullptr;
         m_delay_time = current_time_ms + 1500;
-        /*std::cout << " Status: NoEnemy_EnteringDelay\n\n";*/
         return;
     }
-
-    if (!game_info.controlled_player.health)
-    {
+    if (!game_info.controlled_player.health) {
         m_next_node = nullptr;
         m_delay_time = current_time_ms + 1500;
-        /*std::cout << " Status: Dead_EnteringDelay\n\n";*/
         return;
     }
-
-    if (current_time_ms < m_delay_time)
-    {
-        /*std::cout << " Status: InDelay\n\n";*/
+    if (current_time_ms < m_delay_time) {
         game_info_handler->set_player_movement(Movement{});
         return;
     }
 
-    // —— 路径管理 —— 
+    // 路径管理
     const Vec3D<float>& player_pos = game_info.controlled_player.position;
     const Vec3D<float>& enemy_pos = game_info.closest_enemy_player->position;
     constexpr float ARRIVAL_DIST = 15.0f;
 
-    // 1) 首次或上条路径走完：选 A, B 并计算全程
     if (!m_next_node)
     {
         auto start_node = get_closest_node_to_position(player_pos);
         auto end_node = get_closest_node_to_position(enemy_pos);
         m_current_route = Dijkstra::get_route(start_node, end_node);
-
         if (m_current_route.size() > 1)
         {
             m_next_node = m_current_route[1];
@@ -108,59 +71,85 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
         }
         else
         {
-            // 没路可走
-            /*std::cout << " Status: NoPath_Stuck\n\n";*/
             game_info_handler->set_player_movement(Movement{});
             return;
         }
     }
 
-    // 2) 计算到当前目标的距离
     float distance = m_next_node->position.distance(player_pos);
-    /*std::cout << " player_pos=("
-        << player_pos.x << "," << player_pos.y << "," << player_pos.z << ")\n";
-    std::cout << " distance to next_node(" << m_next_node->id << ")=" << distance << "\n";*/
-
-    // —— 移动或换点 —— 
     Movement mv{};
     std::string status;
 
-    if (distance > ARRIVAL_DIST)
-    {
-        // 正在向目标走
+    if (distance > ARRIVAL_DIST) {
         mv = calculate_move_info(game_info, m_next_node);
         status = "MovingToNode";
     }
-    else
-    {
-        // 到达当前节点，推进到下一个
-        if (m_current_route.size() > 2)
-        {
-            // 抛弃已到达的头，新的 [1] 成为 next_node
-            m_current_route.erase(m_current_route.begin());
-            m_next_node = m_current_route[1];
-            status = "SwitchingNode_to_" + std::to_string(m_next_node->id);
-        }
-        else
-        {
-            // 最后一个节点也到达，停下并清空
-            status = "PathComplete_Stop";
-            m_next_node = nullptr;
-        }
-        // 到达瞬间停一帧
+    else {
+        m_next_node = nullptr;
         mv = Movement{};
     }
-
-    // 3) 发指令 & 打状态
-    /*std::cout << " move flags: "
-        << (mv.forward ? "F" : "_")
-        << (mv.backward ? "B" : "_")
-        << (mv.left ? "L" : "_")
-        << (mv.right ? "R" : "_") << "\n";
-    std::cout << " Status: " << status << "\n\n";*/
-
     game_info_handler->set_player_movement(mv);
+
+    // --- 卡住检测并切换目标节点 ---
+    static Vec3D<float> stuck_prev_pos;
+    static auto stuck_prev_time = std::chrono::steady_clock::now();
+    static bool stuck_timer_active = false;
+    constexpr float STUCK_POS_DELTA = 10.0f;
+    constexpr int STUCK_TIMEOUT_MS = 3000;
+
+    float moved = player_pos.distance(stuck_prev_pos);
+    int stuck_time = std::chrono::duration_cast<std::chrono::milliseconds>(now - stuck_prev_time).count();
+
+    // 只要不是死亡都做卡住检测
+    if (game_info.controlled_player.health > 0) {
+        if (!stuck_timer_active) {
+            stuck_prev_pos = player_pos;
+            stuck_prev_time = now;
+            stuck_timer_active = true;
+        }
+        else {
+            if (stuck_time > STUCK_TIMEOUT_MS && moved < STUCK_POS_DELTA) {
+                std::cout << "[Movement] STUCK! Picking far node..." << std::endl;
+
+                // 按距离降序排列所有节点
+                std::vector<std::shared_ptr<Node>> sorted_nodes = m_nodes;
+                std::sort(sorted_nodes.begin(), sorted_nodes.end(),
+                    [&player_pos](const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) {
+                        return a->position.distance(player_pos) > b->position.distance(player_pos);
+                    });
+
+                bool switched = false;
+                for (const auto& n : sorted_nodes) {
+                    if (!m_next_node || n->id != m_next_node->id) {
+                        auto route = Dijkstra::get_route(get_closest_node_to_position(player_pos), n);
+                        // 只要不是同一个点，并且路径大于一步
+                        if (route.size() > 1 && (!m_next_node || route[1]->id != m_next_node->id)) {
+                            m_current_route = route;
+                            m_next_node = route[1];
+                            std::cout << "[Movement] [Stuck] Picked new wander node: " << m_next_node->id << std::endl;
+                            switched = true;
+                            break;
+                        }
+                    }
+                }
+                if (!switched)
+                    std::cout << "[Movement] WARNING: No suitable alternative node found!" << std::endl;
+                stuck_prev_pos = player_pos;
+                stuck_prev_time = now;
+            }
+            else if (moved >= STUCK_POS_DELTA) {
+                stuck_prev_pos = player_pos;
+                stuck_prev_time = now;
+            }
+        }
+    }
+    else {
+        stuck_timer_active = false;
+    }
 }
+
+
+
 
 // 其余方法保持不变……
 
@@ -183,7 +172,18 @@ void MovementStrategy::handle_navmesh_load(const std::string& map_name)
     else
         m_valid_navmesh_loaded = false;
 }
+// 激活窗口并锁定鼠标到CS2
+void MovementStrategy::focusAndClipCS2Window() {
+    HWND hwnd = FindWindowW(NULL, L"Counter-Strike 2");
+    if (hwnd) {
+        SetForegroundWindow(hwnd);
 
+        RECT rect;
+        if (GetWindowRect(hwnd, &rect)) {
+            ClipCursor(&rect); // 鼠标锁定到窗口
+        }
+    }
+}
 
 bool MovementStrategy::load_in_navmesh(const std::string& filename)
 {
@@ -194,12 +194,13 @@ bool MovementStrategy::load_in_navmesh(const std::string& filename)
         // 如果有 m_edges/m_current_route，也一并清空
         m_current_route.clear();
         m_next_node = nullptr;
-
         std::ifstream ifs(filename);
         m_navmesh_json = json::parse(ifs);
         ifs.close();
         load_nodes(m_navmesh_json);
         load_edges(m_navmesh_json);
+        focusAndClipCS2Window();
+        
     }
     catch (const std::exception& e)
     {

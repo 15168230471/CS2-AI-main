@@ -31,7 +31,7 @@ public:
     void attach_to_process();
     void set_activated_behavior(const ActivatedFeatures& behavior);
     std::pair<bool, Vec3D<float>> get_current_position();
-
+  
 signals:
     void finished();
 public slots:
@@ -47,4 +47,7 @@ private:
     bool m_is_running = true;
     std::unique_ptr<CS2Ai> m_cs2_ai_handler = nullptr;
     std::unique_ptr<NavmeshPoints> m_cs2_navmesh_points_handler = nullptr;
+	int plan_weapon_id = 6720; // Default weapon ID for planning, Á¬Åç
+    //int plan_weapon_id = 525968; // Default weapon ID for planning, AK47
+
 };

@@ -152,36 +152,41 @@ ControlledPlayer GameInformationhandler::read_controlled_player_information(uint
 	dest.movement = read_controlled_player_movement(player_address);
 	dest.head_position = get_head_bone_position(local_player_pawn);
 	dest.chest_position = get_chest_bone_position(local_player_pawn);
-	dest.weaponid = get_weapon_id(local_player_pawn);
+	dest.weapon_info = get_weapon_info(local_player_pawn);
 	dest.isImmune = m_process_memory.read_memory<uint8_t>(local_player_pawn + m_offsets.gun_game_immunity);
 
 	return dest;
 }
 
-uint16_t GameInformationhandler::get_weapon_id(uintptr_t local_player_pawn) {
+WeaponInfo GameInformationhandler::get_weapon_info(uintptr_t local_player_pawn) {
+	WeaponInfo info{};
+
 	// 1. WeaponServices 指针
 	uintptr_t weapon_services = m_process_memory.read_memory<uintptr_t>(local_player_pawn + m_offsets.m_pWeaponServices);
+	if (!weapon_services) return info;
 
 	// 2. m_hActiveWeapon 句柄
 	uint32_t weapon_handle = m_process_memory.read_memory<uint32_t>(weapon_services + m_offsets.m_hActiveWeapon);
-
-	// 3. 计算 entity list 索引
 	uint32_t weapon_index = weapon_handle & 0x1FFF;
 
-	// 4. 获取 entity list 基址
+	// 3. entity list 基址
 	uintptr_t entity_list = m_process_memory.read_memory<uintptr_t>(m_client_dll_address + m_offsets.entity_list_start_offset);
 
-	// 5. 分桶算法获取 weapon entity 地址
+	// 4. Weapon entity 地址
 	uintptr_t list_entity = m_process_memory.read_memory<uintptr_t>(entity_list + ((8 * (weapon_index >> 9)) + 0x10));
 	uintptr_t weapon_entity = m_process_memory.read_memory<uintptr_t>(list_entity + 0x78 * (weapon_index & 0x1FF));
 
-	// 6. 读取武器ID
-	uint16_t weapon_id = m_process_memory.read_memory<uint16_t>(weapon_entity + m_offsets.weapon_id_offset);
+	if (!weapon_entity) return info;
 
-	// 可选打印
-	/*std::cout << "weapon_id: " << weapon_id << std::endl;*/
-	return weapon_id;
+	// 5. 武器ID
+	info.weapon_id = m_process_memory.read_memory<uint16_t>(weapon_entity);
+
+	// 6. 当前弹夹子弹数（m_iClip1）
+	info.ammo_clip1 = m_process_memory.read_memory<int32_t>(weapon_entity + m_offsets.m_iClip1);
+
+	return info;
 }
+
 
 
 
@@ -280,8 +285,8 @@ std::optional<PlayerInformation> GameInformationhandler::read_player(uintptr_t e
 	ent.head_position = get_head_bone_position(current_controller);
 	ent.chest_position = get_chest_bone_position(current_controller);
 	ent.isImmune = m_process_memory.read_memory<uint8_t>(current_controller + m_offsets.gun_game_immunity);
-
-
+	ent.shots_fired = m_process_memory.read_memory<DWORD>(current_controller + m_offsets.shots_fired_offset);
+	ent.pawn_addr = current_controller;
 	return ent;
 }
 

@@ -51,12 +51,12 @@ void CS2Runner::check_weapon_Status()
 {
 	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
 	bool PlayisImmune = game_info.controlled_player.isImmune;
-	uint16_t weaponId = game_info.controlled_player.weaponid;
+	uint16_t weaponId = game_info.controlled_player.weapon_info.weapon_id;
 	int health = game_info.controlled_player.health;
 
 	// 静态变量记录上次不无敌时刻（单位ms）
 	static DWORD last_not_immune_tick = GetTickCount();
-	static bool   last_key_triggered = false;
+
 
 	DWORD now = GetTickCount();
 
@@ -64,14 +64,13 @@ void CS2Runner::check_weapon_Status()
 	std::cout << weaponId << std::endl;
 	std::cout << "health" << health << std::endl;
 	std::cout << now << std::endl;
-	std::cout << last_key_triggered << std::endl;
+
 	std::cout << last_not_immune_tick << std::endl;*/
 	
 	// 满足条件时且没触发过
-	if (!last_key_triggered
-		&& (now - last_not_immune_tick >10000)
+	if ( (now - last_not_immune_tick >10000)
 		&& PlayisImmune == 1
-		&& weaponId != 6720
+		&& weaponId != plan_weapon_id
 		&& health != 0)
 	{
 		
@@ -100,13 +99,13 @@ void CS2Runner::check_weapon_Status()
 			Sleep(75 + rand() % 50); // 75~125ms
 		}
 		last_not_immune_tick = now;
-		last_key_triggered = true;  // 标记本次已触发，10秒内不再触发
+		
 		std::cout << "[DEBUG] buy weapon once!" << std::endl;
 	}
-	// 如果当前处于非无敌状态，更新时间戳，并允许下次触发
-	if ( weaponId == 6720 ) {
-		last_not_immune_tick = now;   // 只要你变成无敌 或 拿了6720 或死亡，tick刷新
-		last_key_triggered = false;   // 允许再次触发
+	// 如果当前处于非无敌状态，更新时间戳
+	if ( weaponId == plan_weapon_id) {
+		last_not_immune_tick = now;   // 只要你变成无敌 或 拿了plan_weapon_id（） 或死亡，tick刷新
+		
 	}
 }
 	

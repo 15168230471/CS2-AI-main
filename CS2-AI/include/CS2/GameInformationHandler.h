@@ -17,7 +17,11 @@ struct Movement
 	bool right = false;
 };
 
-
+struct WeaponInfo {
+	uint16_t weapon_id;
+	int32_t  ammo_clip1;
+	// 你可以扩展其他字段
+};
 
 
 struct ControlledPlayer 
@@ -32,7 +36,7 @@ struct ControlledPlayer
 	int team;
 	int health;
 	bool isImmune;
-	uint16_t weaponid;
+	WeaponInfo weapon_info;  // 包含武器ID和子弹数;
 
 };
 
@@ -44,8 +48,8 @@ struct PlayerInformation
 	int team;
 	int health;
 	bool isImmune;
-	
-
+	DWORD shots_fired;
+	uintptr_t pawn_addr;
 };
 
 
@@ -73,7 +77,7 @@ public:
 	void set_view_vec(const Vec2D<float>& view_vec);
 	void set_player_movement(const Movement& movement);
 	void set_player_shooting(bool val);
-	uint16_t get_weapon_id(uintptr_t local_player_pawn);
+	WeaponInfo get_weapon_info(uintptr_t local_player_pawn);
 
 private:
 	ControlledPlayer read_controlled_player_information(uintptr_t player_address);

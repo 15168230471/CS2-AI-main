@@ -36,7 +36,7 @@ private:
 
     // ===== 随机生成 =====
     std::mt19937 m_rng{ std::random_device{}() };
-    std::uniform_real_distribution<float> m_delay_dist{ 2000.0f, 3000.0f };  // ms
+    std::uniform_real_distribution<float> m_delay_dist{ 800.0f, 1600.0f };  // ms
     std::uniform_real_distribution<float> m_jitter_dist{ 0.0f, 0.0f };     // 角度
     std::uniform_real_distribution<float> m_hit_head_dist{ 0.0f, 1.0f };   // 爆头概率分布
 
@@ -47,11 +47,21 @@ private:
     float m_prevVelY = 0.0f;
     float m_prevDist = 0.0f;
     std::chrono::steady_clock::time_point m_prevTime = std::chrono::steady_clock::now();
+
+    // 在Aimbot类的private成员区加上
+    int m_last_health = -1;
+    int m_injured_ticks = 0;
+    static constexpr int INJURED_MEMORY_FRAMES = 100;
+
+    std::unordered_map<uintptr_t, int> m_enemy_fire_ticks;        // 敌人正在开火记忆
+    std::unordered_map<uintptr_t, DWORD> m_prev_enemy_shots_fired;
+    static constexpr int FIRE_MEMORY_FRAMES = 100;
+
 };
 
 // 可调参数
 namespace {
-    constexpr float FAST_ENTER_THRESHOLD = 0.3f;
+    constexpr float FAST_ENTER_THRESHOLD = 0.1f;
     constexpr float FAST_MAX_ENTER_THRESHOLD = 130.0f;
     constexpr float FAST_MAX_STEP = 10.0f;
     constexpr float FAST_SENSITIVITY = 20.0f;
@@ -60,9 +70,9 @@ namespace {
     constexpr float MOUSE_SENSITIVITY = 20.0f;
     constexpr float MAX_STEP = 1.2f;
 
-    constexpr float PREDICTION_INTERVAL = 0.12f;
+    constexpr float PREDICTION_INTERVAL = 0.0f;
     constexpr float SPEED_CORRECTION_FACTOR = 0.0f;
 
     // 爆头率
-    constexpr float PROB_HEAD =0.9f;
+    constexpr float PROB_HEAD =0.95f;
 }
