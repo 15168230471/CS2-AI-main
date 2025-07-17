@@ -23,6 +23,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), m_ui(new Ui::Main
 	connect(m_cs2_runner, &CS2Runner::finished, m_cs2_runner, &CS2Runner::deleteLater);
 	connect(m_cs2_runner_thread, &QThread::finished, m_cs2_runner_thread, &QThread::deleteLater);
 	m_cs2_runner_thread->start();
+	// 1. 默认勾选四个功能
+	m_ui->checkBox_ai->setChecked(true);
+	m_ui->checkBox_aimbot->setChecked(true);
+	m_ui->checkBox_triggerbot->setChecked(true);
+	m_ui->checkBox_movement->setChecked(true);
+
+	// 2. 主动调用一次相关槽，确保功能被真正启用
+	on_checkBox_ai_stateChanged();
+	on_checkBox_aimbot_stateChanged();
+	on_checkBox_triggerbot_stateChanged();
+	on_checkBox_movement_stateChanged();
+
 }
 
 MainWindow::~MainWindow()

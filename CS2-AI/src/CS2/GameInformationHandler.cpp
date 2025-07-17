@@ -52,13 +52,7 @@ bool GameInformationhandler::is_attached_to_process() const
 	return m_attached_to_process;
 }
 
-void GameInformationhandler::set_view_vec(const Vec2D<float>& view_vec)
-{
-	if (isnan(view_vec.x) || isnan(view_vec.y))
-		return;
 
-	m_process_memory.write_memory<Vec2D<float>>(m_client_dll_address + m_offsets.client_state_view_angle, view_vec);
-}
 
 void GameInformationhandler::set_player_movement(const Movement& movement)
 {
@@ -91,14 +85,7 @@ void GameInformationhandler::set_player_movement(const Movement& movement)
 	handle_key(movement.right, d_key_code);
 }
 
-void GameInformationhandler::set_player_shooting(bool val)
-{
-	constexpr DWORD not_shooting_value = 16777472;
 
-	DWORD mem_val = val ? button_pressed_value : not_shooting_value;
-
-	m_process_memory.write_memory<DWORD>(m_client_dll_address + m_offsets.force_attack, mem_val);
-}
 
 std::optional<PlayerInformation> GameInformationhandler::get_closest_enemy(const GameInformation& game_info)
 {

@@ -1,6 +1,9 @@
 #include "UI/CS2Runner.h"
 #include <windows.h>
 
+
+extern volatile bool g_isPaused;
+
 CS2Runner::CS2Runner() : QObject(nullptr)
 {
 	m_cs2_ai_handler = std::make_unique<CS2Ai>();
@@ -47,6 +50,7 @@ void CS2Runner::check_map_team_Status()
 	}
 }
 
+
 void CS2Runner::check_weapon_Status()
 {
 	auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
@@ -61,11 +65,12 @@ void CS2Runner::check_weapon_Status()
 	DWORD now = GetTickCount();
 
 	/*std::cout << "PlayisImmune" << PlayisImmune << std::endl;
-	std::cout << weaponId << std::endl;
+	
 	std::cout << "health" << health << std::endl;
 	std::cout << now << std::endl;
 
 	std::cout << last_not_immune_tick << std::endl;*/
+	/*std::cout << weaponId << std::endl;*/
 	
 	// 满足条件时且没触发过
 	if ( (now - last_not_immune_tick >10000)
@@ -111,7 +116,8 @@ void CS2Runner::check_weapon_Status()
 	
 void CS2Runner::update()
 {
-	
+	if (g_isPaused)
+		return;
 	auto now = std::chrono::steady_clock::now();
 	if (now - m_lastStatusCheck >= m_statusCheckInterval) {
 		m_lastStatusCheck = now;
@@ -120,10 +126,39 @@ void CS2Runner::update()
 	check_weapon_Status();
 	std::scoped_lock lock(m_mutex);
 	if (m_mode == ModeRunning::AI)
+	{ 
 		m_cs2_ai_handler->update();
+		focusAndClipCS2Window();
+	}
 	else if (m_mode == ModeRunning::POINT_CREATOR)
 		m_cs2_navmesh_points_handler->update();
 }
+void CS2Runner::focusAndClipCS2Window() {
+	auto opt_cfg = Config::read_in_config_data();
+	std::string winname = "Counter-Strike 2"; // 默认
+	if (opt_cfg.has_value()) {
+		winname = opt_cfg->windowname;
+	}
+	// 转wstring
+	std::wstring wname(winname.begin(), winname.end());
+	HWND hwnd = FindWindowW(NULL, wname.c_str());
+	if (hwnd) {
+		SetForegroundWindow(hwnd);
+		// ====== 改为锁定客户区 ======
+		RECT clientRect;
+		if (GetClientRect(hwnd, &clientRect)) {
+			POINT tl = { clientRect.left, clientRect.top };
+			POINT br = { clientRect.right, clientRect.bottom };
+			ClientToScreen(hwnd, &tl);
+			ClientToScreen(hwnd, &br);
+			RECT clipRect = { tl.x, tl.y, br.x, br.y };
+			ClipCursor(&clipRect);
+		}
+		// ====== 结束 ======
+	}
+}
+
+
 
 void CS2Runner::set_mode(ModeRunning mode)
 {

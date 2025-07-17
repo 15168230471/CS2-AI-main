@@ -37,7 +37,6 @@ private:
     // ===== 随机生成 =====
     std::mt19937 m_rng{ std::random_device{}() };
     std::uniform_real_distribution<float> m_delay_dist{ 800.0f, 1600.0f };  // ms
-    std::uniform_real_distribution<float> m_jitter_dist{ 0.0f, 0.0f };     // 角度
     std::uniform_real_distribution<float> m_hit_head_dist{ 0.0f, 1.0f };   // 爆头概率分布
 
     // ===== 预测相关状态 =====
@@ -61,8 +60,8 @@ private:
 
 // 可调参数
 namespace {
-    constexpr float FAST_ENTER_THRESHOLD = 0.1f;
-    constexpr float FAST_MAX_ENTER_THRESHOLD = 130.0f;
+    constexpr float FAST_ENTER_THRESHOLD = 0.0f;
+    constexpr float FAST_MAX_ENTER_THRESHOLD = 150.0f;
     constexpr float FAST_MAX_STEP = 10.0f;
     constexpr float FAST_SENSITIVITY = 20.0f;
 

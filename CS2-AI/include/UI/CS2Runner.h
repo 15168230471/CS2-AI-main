@@ -8,7 +8,7 @@
 #include <memory>
 #include "CS2/CS2AI.h"
 #include "CS2/NavmeshPoints.h"
-
+#include "CS2/ConfigReader.h"
 enum class ModeRunning
 {
     NONE = 0, AI, POINT_CREATOR
@@ -21,6 +21,7 @@ class CS2Runner : public QObject
 public:
     CS2Runner();
     void update();
+    void focusAndClipCS2Window();
     void set_mode(ModeRunning mode);
     void set_add_point_key(int key_code);
     bool save_navmesh_points();
@@ -47,7 +48,7 @@ private:
     bool m_is_running = true;
     std::unique_ptr<CS2Ai> m_cs2_ai_handler = nullptr;
     std::unique_ptr<NavmeshPoints> m_cs2_navmesh_points_handler = nullptr;
-	int plan_weapon_id = 6720; // Default weapon ID for planning, Á¬Åç
+	int plan_weapon_id = 10768; // Default weapon ID for planning, Á¬Åç
     //int plan_weapon_id = 525968; // Default weapon ID for planning, AK47
 
 };

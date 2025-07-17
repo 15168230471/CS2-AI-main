@@ -172,18 +172,7 @@ void MovementStrategy::handle_navmesh_load(const std::string& map_name)
     else
         m_valid_navmesh_loaded = false;
 }
-// 激活窗口并锁定鼠标到CS2
-void MovementStrategy::focusAndClipCS2Window() {
-    HWND hwnd = FindWindowW(NULL, L"Counter-Strike 2");
-    if (hwnd) {
-        SetForegroundWindow(hwnd);
 
-        RECT rect;
-        if (GetWindowRect(hwnd, &rect)) {
-            ClipCursor(&rect); // 鼠标锁定到窗口
-        }
-    }
-}
 
 bool MovementStrategy::load_in_navmesh(const std::string& filename)
 {
@@ -199,7 +188,7 @@ bool MovementStrategy::load_in_navmesh(const std::string& filename)
         ifs.close();
         load_nodes(m_navmesh_json);
         load_edges(m_navmesh_json);
-        focusAndClipCS2Window();
+       
         
     }
     catch (const std::exception& e)

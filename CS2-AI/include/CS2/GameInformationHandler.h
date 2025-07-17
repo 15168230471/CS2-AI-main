@@ -74,9 +74,7 @@ public:
 
 	GameInformation get_game_information() const;
 	bool is_attached_to_process()const;
-	void set_view_vec(const Vec2D<float>& view_vec);
 	void set_player_movement(const Movement& movement);
-	void set_player_shooting(bool val);
 	WeaponInfo get_weapon_info(uintptr_t local_player_pawn);
 
 private:

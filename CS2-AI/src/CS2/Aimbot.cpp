@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <QDebug>
 
-extern volatile bool g_isPaused;
+
 
 void Aimbot::move_mouse(float dx, float dy) {
     if (dx == 0.0f && dy == 0.0f)
@@ -76,8 +76,7 @@ Vec2D<float> Aimbot::predictTarget(float tgtX, float tgtY) {
 }
 
 void Aimbot::update(GameInformationhandler* info_handler) {
-    if (g_isPaused || !info_handler)
-        return;
+    
 
     GameInformation gi = info_handler->get_game_information();
 
@@ -212,8 +211,7 @@ void Aimbot::update(GameInformationhandler* info_handler) {
     float dx_step = std::clamp(dx_pred * speedScale, -MAX_STEP * speedScale, MAX_STEP * speedScale);
     float dy_step = std::clamp(dy_pred * speedScale, -MAX_STEP * speedScale, MAX_STEP * speedScale);
 
-    dx_step += m_jitter_dist(m_rng);
-    dy_step += m_jitter_dist(m_rng);
+
 
     double dt = std::chrono::duration<double>(now_tp - m_last_time).count();
     float alpha = dt / (SMOOTHING_TIME + dt);

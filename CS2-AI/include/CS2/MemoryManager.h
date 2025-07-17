@@ -54,16 +54,6 @@ public:
 		return result;
 	}
 
-	template <typename type>
-	bool write_memory(uintptr_t address, const type& data)
-	{
-		if (!WriteProcessMemory(m_process, reinterpret_cast<LPVOID>(address), &data, sizeof(data), NULL) && debug_print)
-		{
-			Logging::log_error("Error Reading Memory Error Code: " + std::to_string(GetLastError()));
-			return false;
-		}
-		return true;
-	}
 
 private:
 	Offsets m_offsets;

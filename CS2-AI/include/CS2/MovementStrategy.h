@@ -43,6 +43,6 @@ private:
 	bool m_valid_navmesh_loaded;
 	long long m_delay_time = 0;
 	bool m_debug_print_route = false;
-	void focusAndClipCS2Window();
+
 
 };
