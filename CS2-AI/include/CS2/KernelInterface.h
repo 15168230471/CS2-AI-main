@@ -8,7 +8,6 @@ struct KERNEL_READ_REQUEST {
     ULONG pid;
     uintptr_t address;
     SIZE_T size;
-    void* buffer;
 };
 
 class KernelInterface {
@@ -20,5 +19,5 @@ public:
     bool read_memory(DWORD pid, uintptr_t address, void* buffer, SIZE_T size);
 
 private:
-    HANDLE m_driver_handle;
+    HANDLE m_driver_handle = INVALID_HANDLE_VALUE;
 };

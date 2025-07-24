@@ -19,10 +19,10 @@ namespace TriggerbotHumanizedConfig {
     constexpr int HOLD_MIN_MS = 20;
     constexpr int HOLD_MAX_MS = 50;
     constexpr int BASE_FIRE_DELAY_MS = 350;
-    constexpr int VAR_FIRE_DELAY_MIN = 0;
+    constexpr int VAR_FIRE_DELAY_MIN = 20;
     constexpr int VAR_FIRE_DELAY_MAX = 100;
     // 新增：近距离定义
-    constexpr float CLOSE_DIST_THRESHOLD = 1000.0f;
+    constexpr float CLOSE_DIST_THRESHOLD = 0.0f;
     constexpr int CLOSE_REACT_DELAY_MS = 10;
 }
 
