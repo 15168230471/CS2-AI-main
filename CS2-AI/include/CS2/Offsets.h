@@ -35,8 +35,7 @@ public:
 	uintptr_t m_hActiveWeapon;      // WeaponServices结构体里的 m_hActiveWeapon 偏移
 	uintptr_t weapon_id_offset;     // 武器实体结构体里的 m_iItemDefinitionIndex 偏移
 	uintptr_t m_iClip1;
-
-
 };
 
 std::optional <Offsets> load_offsets_from_files();
+

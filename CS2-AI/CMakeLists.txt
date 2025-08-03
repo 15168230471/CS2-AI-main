@@ -10,7 +10,9 @@ if	(MSVC)
     list(APPEND CMAKE_PREFIX_PATH $ENV{QT_MSVC_64})
 endif(MSVC)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network)  # 新增 Network
+
+
 
 set (UTILITY_HEADER
 	"include/Utility/json.hpp"
@@ -47,6 +49,7 @@ set (CS2_HEADER
 	"include/CS2/Offsets.h"
 	"include/CS2/Triggerbot.h"
 	"include/CS2/Constants.h"
+	"include/CS2/KernelInterface.h"   # 新增这一行
 )
 
 set (HEADERS
@@ -66,6 +69,7 @@ set(CS2_SOURCE
 	"src/CS2/NavmeshPoints.cpp"
 	"src/CS2/Offsets.cpp"
 	"src/CS2/Triggerbot.cpp"
+	"src/CS2/KernelInterface.cpp"    # 新增这一行
 )
 
 set(UI_SOURCE
@@ -107,7 +111,8 @@ add_executable(CS2_AI "src/main.cpp" ${SOURCES} ${HEADERS} ${QT_UI_FILES})
 target_include_directories(CS2_AI PUBLIC "include")
 set_property(TARGET CS2_AI PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT CS2_AI)
-target_link_libraries(CS2_AI Qt6::Widgets)
+target_link_libraries(CS2_AI Qt6::Widgets Qt6::Network)  # 新增 Qt6::Network
+
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 add_custom_command(TARGET CS2_AI 
                    POST_BUILD
