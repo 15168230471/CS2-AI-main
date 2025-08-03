@@ -83,6 +83,7 @@ std::optional<Offsets> load_offsets_from_files()
         offsets.global_vars = static_cast<uintptr_t>(general_offsets_json["client.dll"]["dwGlobalVars"]);
         offsets.client_state_view_angle = static_cast<uintptr_t>(general_offsets_json["client.dll"]["dwViewAngles"]);
 
+
         offsets.player_health_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BaseEntity"]["fields"]["m_iHealth"]);
         offsets.player_pawn_handle = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["CCSPlayerController"]["fields"]["m_hPlayerPawn"]);
         offsets.team_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BaseEntity"]["fields"]["m_iTeamNum"]);
@@ -106,8 +107,14 @@ std::optional<Offsets> load_offsets_from_files()
         offsets.force_right = static_cast<uintptr_t>(buttons_offsets_json["client.dll"]["right"]);
 
         offsets.crosshair_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawnBase"]["fields"]["m_iIDEntIndex"]);
+        
+        
+        // engine2.dll 的 dwNetworkGameClient 和 dwNetworkGameClient_isBackgroundMap
+        const auto& engine_offsets = general_offsets_json["engine2.dll"];
+        offsets.network_game_client = static_cast<uintptr_t>(engine_offsets["dwNetworkGameClient"]);
+        offsets.network_game_client_is_background_map =
+            static_cast<uintptr_t>(engine_offsets["dwNetworkGameClient_isBackgroundMap"]);
 
-        // current_map 未在偏移文件中定义，保留默认值
     }
     catch (std::exception const& e)
     {

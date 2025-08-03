@@ -30,6 +30,7 @@ public:
 	uintptr_t current_map;
 	uintptr_t global_vars;
 	uintptr_t network_game_client;
+	uintptr_t network_game_client_is_background_map; // 新增：engine2.dll 中 isBackgroundMap 标志的绝对偏移（dwNetworkGameClient_isBackgroundMap）
 	uintptr_t gun_game_immunity;  // 死斗时是否无敌状态
 	uintptr_t m_pWeaponServices;    // Pawn结构体里 WeaponServices指针的偏移
 	uintptr_t m_hActiveWeapon;      // WeaponServices结构体里的 m_hActiveWeapon 偏移

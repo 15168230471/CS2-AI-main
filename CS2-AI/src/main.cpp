@@ -9,6 +9,9 @@ volatile bool g_isPaused = false;
 
 int main(int argc, char* argv[])
 {
+    // Windows 10+ 推荐：让进程自己对 DPI 负责，避免系统虚拟化坐标
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     QApplication app(argc, argv);
     MainWindow w;
     w.show();

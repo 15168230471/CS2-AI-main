@@ -15,8 +15,19 @@ bool GameInformationhandler::init(const Config& config)
 	return m_attached_to_process;
 }
 
-
-
+bool GameInformationhandler::is_background_map() {
+	// 先拿engine2.dll基址
+	auto engine_base = m_process_memory.get_module_address("engine2.dll");
+	
+	if (!engine_base || m_offsets.network_game_client == 0 || m_offsets.network_game_client_is_background_map == 0)
+		return false;
+	// 先拿NetworkGameClient对象指针
+	uintptr_t network_game_client_ptr = m_process_memory.read_memory<uintptr_t>(engine_base + m_offsets.network_game_client);
+	if (!network_game_client_ptr) return false;
+	// 再拿成员变量
+	uint8_t is_bg_map = m_process_memory.read_memory<uint8_t>(network_game_client_ptr + m_offsets.network_game_client_is_background_map);
+	return is_bg_map != 0;
+}
 
 
 bool GameInformationhandler::loadOffsets()

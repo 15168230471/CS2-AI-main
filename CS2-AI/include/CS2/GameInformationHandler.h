@@ -76,6 +76,7 @@ public:
 	bool is_attached_to_process()const;
 	void set_player_movement(const Movement& movement);
 	WeaponInfo get_weapon_info(uintptr_t local_player_pawn);
+	bool is_background_map();
 
 private:
 	ControlledPlayer read_controlled_player_information(uintptr_t player_address);
