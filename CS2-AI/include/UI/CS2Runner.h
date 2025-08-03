@@ -48,7 +48,7 @@ private:
     bool m_is_running = true;
     std::unique_ptr<CS2Ai> m_cs2_ai_handler = nullptr;
     std::unique_ptr<NavmeshPoints> m_cs2_navmesh_points_handler = nullptr;
-	int plan_weapon_id = 10768; // Default weapon ID for planning, Á¬Åç
+	int plan_weapon_id = 13760; // Default weapon ID for planning, Á¬Åç
     //int plan_weapon_id = 525968; // Default weapon ID for planning, AK47
 
 };
