@@ -63,10 +63,10 @@ namespace {
     constexpr float FAST_ENTER_THRESHOLD = 0.0f;
     constexpr float FAST_MAX_ENTER_THRESHOLD = 150.0f;
     constexpr float FAST_MAX_STEP = 10.0f;
-    constexpr float FAST_SENSITIVITY = 20.0f;
+    constexpr float FAST_SENSITIVITY = 16.0f;
 
     constexpr float SMOOTHING_TIME = 0.13f;
-    constexpr float MOUSE_SENSITIVITY = 20.0f;
+    constexpr float MOUSE_SENSITIVITY = 16.0f;
     constexpr float MAX_STEP = 1.2f;
 
     constexpr float PREDICTION_INTERVAL = 0.0f;

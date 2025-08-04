@@ -300,3 +300,39 @@ std::optional<PlayerInformation> GameInformationhandler::read_player_in_crosshai
 		return {};
 	return read_player(entity_list_start_address, cross_hair_ID, player_controller);
 }
+int GameInformationhandler::get_local_player_rank()
+{
+
+	bool ok = false;
+
+	uintptr_t controller = m_process_memory.read_memory<uintptr_t>(
+		m_client_dll_address + m_offsets.local_player_controller_offset);
+	if (!controller) {
+		std::cout << "[RANK DEBUG] controller null\n";
+		return -1;
+	}
+	std::cout << "[RANK DEBUG] controller = 0x" << std::hex << controller << std::dec << "\n";
+
+	uintptr_t inventory_services = m_process_memory.read_memory<uintptr_t>(
+		controller + m_offsets.m_pInventoryServices, &ok);
+	if (!ok) {
+		std::cout << "[RANK DEBUG] failed to read inventory services pointer\n";
+		return -1;
+	}
+	if (!inventory_services) {
+		std::cout << "[RANK DEBUG] inventory services is null\n";
+		return -1;
+	}
+	std::cout << "[RANK DEBUG] inventory_services = 0x" << std::hex << inventory_services << std::dec << "\n";
+
+	// 读 m_rank，尝试多种宽度
+	int rank_int = m_process_memory.read_memory<int>(inventory_services + m_offsets.m_rank, &ok);
+	std::cout << "[RANK DEBUG] raw rank (int) = " << rank_int << "\n";
+
+	uint8_t rank_byte = m_process_memory.read_memory<uint8_t>(inventory_services + m_offsets.m_rank, &ok);
+	std::cout << "[RANK DEBUG] raw rank (byte) = " << static_cast<int>(rank_byte) << "\n";
+
+	if (rank_byte != 0) return static_cast<int>(rank_byte);
+	return rank_int; // fallback
+}
+

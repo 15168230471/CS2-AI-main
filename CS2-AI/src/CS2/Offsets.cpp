@@ -98,6 +98,15 @@ std::optional<Offsets> load_offsets_from_files()
         offsets.m_iClip1 = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_BasePlayerWeapon"]["fields"]["m_iClip1"]);
 
         offsets.shots_fired_offset = static_cast<uintptr_t>(client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawn"]["fields"]["m_iShotsFired"]);
+        // C_CSPlayerController 中的 inventory services 组件指针
+        offsets.m_pInventoryServices = static_cast<uintptr_t>(
+   client_offsets_json["client.dll"]["classes"]
+            ["CCSPlayerController"]["fields"]["m_pInventoryServices"]);
+
+        // InventoryServices 里的 rank
+        offsets.m_rank = static_cast<uintptr_t>(
+            client_offsets_json["client.dll"]["classes"]
+            ["CCSPlayerController_InventoryServices"]["fields"]["m_nPersonaDataPublicLevel"]);
 
         // 按键偏移量
         offsets.force_attack = static_cast<uintptr_t>(buttons_offsets_json["client.dll"]["attack"]);

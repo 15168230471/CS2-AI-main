@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <random>
 #include <iostream>
+#include "Utility/Logging.h" // 如果你用 Logging::log_error 等
 
 extern volatile bool g_isPaused;
 
@@ -38,28 +39,70 @@ void human_move_mouse(POINT start, POINT target, int duration_ms) {
         int sleep_ms = 10 + rand_int(-3, 3);
         std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
     }
-    SetCursorPos(target.x, target.y); // 最终对齐
+    SetCursorPos(target.x, target.y);
 }
 
-void human_click_at(POINT screenPt) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(30, 120))); // 微犹豫
-
+void human_click_at(POINT /*screenPt*/) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(30, 120)));
     INPUT down{ 0 };
     down.type = INPUT_MOUSE;
     down.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
     SendInput(1, &down, sizeof(down));
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(50, 120))); // 按住时间
-
+    std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(50, 120)));
     INPUT up{ 0 };
     up.type = INPUT_MOUSE;
     up.mi.dwFlags = MOUSEEVENTF_LEFTUP;
     SendInput(1, &up, sizeof(up));
 }
 
-// --------------------------------------------------
-// CS2Runner 实现
-// --------------------------------------------------
+// ==== 工具 / 内部辅助 ====
+
+static HWND get_cs2_hwnd_from_config()
+{
+    auto opt_cfg = Config::read_in_config_data();
+    std::string winname = "Counter-Strike 2";
+    if (opt_cfg.has_value()) {
+        winname = opt_cfg->windowname;
+    }
+    std::wstring wname(winname.begin(), winname.end());
+    return FindWindowW(NULL, wname.c_str());
+}
+
+bool activate_window_strong(HWND target)
+{
+    if (!target) return false;
+
+    DWORD foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
+    DWORD targetThread = GetWindowThreadProcessId(target, nullptr);
+    DWORD currentThread = GetCurrentThreadId();
+
+    AttachThreadInput(currentThread, targetThread, TRUE);
+    AttachThreadInput(foregroundThread, targetThread, TRUE);
+
+    SetForegroundWindow(target);
+    SetActiveWindow(target);
+    SetWindowPos(target, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+
+    auto start = std::chrono::steady_clock::now();
+    bool success = false;
+    while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500)) {
+        if (GetForegroundWindow() == target) {
+            success = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    AttachThreadInput(currentThread, targetThread, FALSE);
+    AttachThreadInput(foregroundThread, targetThread, FALSE);
+
+    if (!success) {
+        std::cout << "[WARN] activate_window_strong: failed to make target foreground\n";
+    }
+    return success;
+}
+
+// ==== CS2Runner 实现 ====
 
 CS2Runner::CS2Runner() : QObject(nullptr)
 {
@@ -80,18 +123,6 @@ void CS2Runner::run()
     deleteLater();
 }
 
-// 工具：从配置获取 CS2 窗口句柄
-static HWND get_cs2_hwnd_from_config()
-{
-    auto opt_cfg = Config::read_in_config_data();
-    std::string winname = "Counter-Strike 2";
-    if (opt_cfg.has_value()) {
-        winname = opt_cfg->windowname;
-    }
-    std::wstring wname(winname.begin(), winname.end());
-    return FindWindowW(NULL, wname.c_str());
-}
-
 bool CS2Runner::is_background_map()
 {
     auto handler = m_cs2_ai_handler->get_game_info_handler();
@@ -100,31 +131,24 @@ bool CS2Runner::is_background_map()
     return handler->is_background_map();
 }
 
-// 拟人化客户区点击（替代原来的 click_in_window）
 void CS2Runner::click_in_window(HWND hwnd, POINT clientPt)
 {
     if (!hwnd) return;
 
-    // 先激活窗口（不过不要太机械）
     SetForegroundWindow(hwnd);
     std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(30, 80)));
 
-    // 客户区转屏幕坐标
     POINT screenPt = clientPt;
     if (!ClientToScreen(hwnd, &screenPt)) {
         std::cerr << "[WARN] ClientToScreen failed\n";
         return;
     }
 
-    // 当前鼠标位置
     POINT current;
     GetCursorPos(&current);
 
-    // 平滑移动到目标
-    int moveDuration = rand_int(180, 380); // 拟人速度
-    human_move_mouse(current, screenPt, moveDuration);
+    human_move_mouse(current, screenPt, rand_int(180, 380));
 
-    // 20% 概率轻微偏移再修正（模拟人手抖）
     if (rand_double() < 0.2) {
         POINT miss = { screenPt.x + rand_int(-5, 5), screenPt.y + rand_int(-5, 5) };
         SetCursorPos(miss.x, miss.y);
@@ -132,81 +156,34 @@ void CS2Runner::click_in_window(HWND hwnd, POINT clientPt)
         human_move_mouse(miss, screenPt, rand_int(80, 140));
     }
 
-    // 点击
     human_click_at(screenPt);
 }
-bool activate_window_strong(HWND target)
-{
-    if (!target) return false;
 
-    // 获取前台窗口线程/目标窗口线程
-    DWORD foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-    DWORD targetThread = GetWindowThreadProcessId(target, nullptr);
-    DWORD currentThread = GetCurrentThreadId();
-
-    // 绑定输入线程（防止 SetForegroundWindow 失败）
-    AttachThreadInput(currentThread, targetThread, TRUE);
-    AttachThreadInput(foregroundThread, targetThread, TRUE);
-
-    // 激活和置顶
-    SetForegroundWindow(target);
-    SetActiveWindow(target);
-    SetWindowPos(target, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-    
-    // 确认前台（最多等 500ms）
-    auto start = std::chrono::steady_clock::now();
-    bool success = false;
-    while (std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500)) {
-        if (GetForegroundWindow() == target) {
-            success = true;
-            break;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    // 解绑
-    AttachThreadInput(currentThread, targetThread, FALSE);
-    AttachThreadInput(foregroundThread, targetThread, FALSE);
-
-    if (!success) {
-        std::cout << "[WARN] activate_window_strong: failed to make target foreground\n";
-    }
-    return success;
-}
 void CS2Runner::perform_click_sequence(HWND hwnd)
 {
     if (!hwnd) return;
 
-    // 如果你持有 MainWindow 指针，这里最小化一下（需要传入或全局访问）
-    // e.g., if (mainWindowPtr) mainWindowPtr->showMinimized();
-
-    // 强激活 CS2：AttachThreadInput + 置前
     bool activated = activate_window_strong(hwnd);
     if (!activated) {
-        // 失败可以再试一次短暂延迟后重试
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         activate_window_strong(hwnd);
     }
 
-    // 额外小缓冲（拟人）
+    std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(200, 400)));
     std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(200, 400)));
 
-    // 3. 再额外缓冲一段拟人化间隔，防止 overlay/主窗口干扰
-    std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(200, 400)));
     const POINT sequence[] = {
-    {803, 400},  // "确定" (443-80)
-    {785, 569},  // "关闭" (612-80)
-    {661, 18},  // "开始" 顶部菜单 (61-80)  // 注意：变成负值的话可能不合法，需要夹在客户区内
-    {552, 56},   // "匹配" (94-80)
-    {710, 82},   // "死亡竞赛" (125-80)
-    {341, 376},  // "炸弹拆除地图组1号" (419-80)
-    {1121, 682}  // "开始" 底部菜单 (725-80)
+        {803, 400},  // "确定"
+        {785, 569},  // "关闭"
+        {661, 18},   // "开始" 顶部
+        {552, 56},   // "匹配"
+        {710, 82},   // "死亡竞赛"
+        {341, 376},  // "炸弹拆除地图组1号"
+        {1121, 682}  // "开始"
     };
-
 
     for (const auto& pt : sequence) {
         click_in_window(hwnd, pt);
-        // 拟人间隔：1.2~1.8 秒
         std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(1000, 1500)));
     }
 }
@@ -238,11 +215,10 @@ void CS2Runner::terminate_process_by_name(const std::wstring& name)
     CloseHandle(snapshot);
 }
 
-// 每 5 分钟基于 BackgroundMap 做一次判断/操作
 void CS2Runner::check_matchmaking_status()
 {
     auto now = std::chrono::steady_clock::now();
-    if (now - m_lastBackgroundCheck < std::chrono::minutes(1))
+    if (now - m_lastBackgroundCheck < kBackgroundCheckInterval)
         return;
     m_lastBackgroundCheck = now;
 
@@ -279,8 +255,8 @@ void CS2Runner::check_map_team_Status()
 {
     auto game_info = m_cs2_ai_handler->get_game_info_handler()->get_game_information();
     int team = game_info.controlled_player.team;
-    std::string mapName = "";
-    if (mapName == "") {
+    std::string mapName;
+    if (mapName.empty()) {
         mapName = std::string(game_info.current_map);
         std::replace(mapName.begin(), mapName.end(), '/', '_');
     }
@@ -297,6 +273,49 @@ void CS2Runner::check_map_team_Status()
         inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
         SendInput(2, inputs, sizeof(INPUT));
     }
+}
+
+void CS2Runner::log_rank_if_due()
+{
+    if (!m_attached)
+        return;
+
+    if (is_background_map())
+        return;
+
+    auto now = std::chrono::steady_clock::now();
+    if (now - m_last_rank_log < kRankLogInterval)
+        return;
+    m_last_rank_log = now;
+
+    auto game_info_handler = m_cs2_ai_handler->get_game_info_handler();
+    if (!game_info_handler)
+        return;
+
+    int rank = game_info_handler->get_local_player_rank();
+    if (rank < 0) {
+        std::cout << "[RANK] failed to get rank\n";
+        return;
+    }
+
+    std::cout << "[RANK] local player rank = " << rank << std::endl;
+
+    if (m_last_recorded_rank < 0) {
+        m_last_recorded_rank = rank;
+        return;
+    }
+
+    if (rank > m_last_recorded_rank) {
+        std::cout << "[RANK] Detected rank increase: " << m_last_recorded_rank << " -> " << rank
+            << ", shutting down CS2/Steam/self.\n";
+
+        terminate_process_by_name(L"cs2.exe");
+        terminate_process_by_name(L"steam.exe");
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::exit(0);
+    }
+
+    m_last_recorded_rank = rank;
 }
 
 void CS2Runner::check_weapon_Status()
@@ -349,20 +368,36 @@ void CS2Runner::update()
     if (g_isPaused)
         return;
 
-    // 先做 background map 检查/控制流（在地图判断之前）
-    check_matchmaking_status();
-    if (m_sequenceAttempted && is_background_map()) {
-        return; // short-circuit：刚做过 background 点击，跳过后续
+    // 1. 附加 CS2 进程（如果还没附着，每 kAttachRetryInterval 试一次）
+    if (!m_attached) {
+        auto now_attach = std::chrono::steady_clock::now();
+        if (now_attach - m_lastAttachAttempt >= kAttachRetryInterval) {
+            m_lastAttachAttempt = now_attach;
+            attach_to_process(); // 会设置 m_attached
+        }
+        return; // 未附加不继续依赖游戏信息的逻辑
     }
 
+    // 2. 段位/等级检查（优先于 background map，因为 background map 在主菜单会短路）
+    log_rank_if_due();
+
+    // 3. 背景图相关逻辑（短路在地图判断之前）
+    check_matchmaking_status();
+    if (m_sequenceAttempted && is_background_map()) {
+        return;
+    }
+
+    // 4. 普通状态检查（如队伍/选人）
     auto now = std::chrono::steady_clock::now();
     if (now - m_lastStatusCheck >= m_statusCheckInterval) {
         m_lastStatusCheck = now;
         check_map_team_Status();
     }
 
+    // 5. 武器状态
     check_weapon_Status();
 
+    // 6. 主体更新
     std::scoped_lock lock(m_mutex);
     if (m_mode == ModeRunning::AI)
     {
@@ -442,10 +477,14 @@ void CS2Runner::load_navmesh()
 void CS2Runner::attach_to_process()
 {
     std::scoped_lock lock(m_mutex);
-    if (!m_cs2_ai_handler->attach_to_cs2_process())
+    if (!m_cs2_ai_handler->attach_to_cs2_process()) {
+        m_attached = false;
         Logging::log_error("Error getting dll address / Error attaching to CS2 process");
-    else
+    }
+    else {
+        m_attached = true;
         Logging::log_success("Attached to the CS2 process");
+    }
 }
 
 void CS2Runner::set_activated_behavior(const ActivatedFeatures& behavior)

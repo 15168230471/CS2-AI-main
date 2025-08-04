@@ -77,7 +77,7 @@ public:
 	void set_player_movement(const Movement& movement);
 	WeaponInfo get_weapon_info(uintptr_t local_player_pawn);
 	bool is_background_map();
-
+	int get_local_player_rank();
 private:
 	ControlledPlayer read_controlled_player_information(uintptr_t player_address);
 	std::vector<PlayerInformation> read_other_players(uintptr_t player_address);
