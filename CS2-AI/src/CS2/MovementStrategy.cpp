@@ -15,6 +15,12 @@
 using nlohmann::json;
 
 
+MovementStrategy::MovementStrategy()
+    : m_valid_navmesh_loaded(false), m_delay_time(0), m_debug_print_route(false)
+{
+    std::cout << "[Movement] MovementStrategy initialized" << std::endl;
+}
+
 void MovementStrategy::update(GameInformationhandler* game_info_handler)
 {
     const GameInformation game_info = game_info_handler->get_game_information();
@@ -22,10 +28,13 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
     auto now = std::chrono::steady_clock::now();
 
     handle_navmesh_load(game_info.current_map);
-    if (!m_valid_navmesh_loaded)
+    if (!m_valid_navmesh_loaded) {
+        std::cout << "[Movement] No valid navmesh loaded. Skipping update." << std::endl;
         return;
+    }
 
     if (g_just_fired) {
+        std::cout << "[Movement] Just fired, pausing movement" << std::endl;
         m_last_shoot_time = now;
         g_just_fired = false;
         m_next_node = nullptr;
@@ -35,21 +44,25 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
 
     int elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_shoot_time).count();
     if (elapsed < m_stop_after_shoot_ms) {
+        std::cout << "[Movement] Waiting after shoot (" << elapsed << "ms)" << std::endl;
         m_next_node = nullptr;
         game_info_handler->set_player_movement(Movement{});
         return;
     }
     if (!game_info.closest_enemy_player) {
+        std::cout << "[Movement] No enemy detected, delaying movement" << std::endl;
         m_next_node = nullptr;
         m_delay_time = current_time_ms + 1500;
         return;
     }
     if (!game_info.controlled_player.health) {
+        std::cout << "[Movement] Player has no health, delaying movement" << std::endl;
         m_next_node = nullptr;
         m_delay_time = current_time_ms + 1500;
         return;
     }
     if (current_time_ms < m_delay_time) {
+        std::cout << "[Movement] Movement delayed " << (m_delay_time - current_time_ms) << "ms" << std::endl;
         game_info_handler->set_player_movement(Movement{});
         return;
     }
@@ -160,6 +173,8 @@ void MovementStrategy::handle_navmesh_load(const std::string& map_name)
     if (std::find(invalid_maps.begin(), invalid_maps.end(), map_name) != invalid_maps.end()) {
         m_loaded_map.clear();
         m_valid_navmesh_loaded = false;
+        if (!map_name.empty())
+            std::cout << "[Movement] Invalid map name: " << map_name << std::endl;
         return;
     }
     if (map_name == m_loaded_map) return;
@@ -167,10 +182,14 @@ void MovementStrategy::handle_navmesh_load(const std::string& map_name)
     std::string processed = map_name;
     std::replace(processed.begin(), processed.end(), '/', '_');
     std::string path = "Navmesh/json/" + processed + ".json";
-    if (load_in_navmesh(path))
+    if (load_in_navmesh(path)) {
         m_valid_navmesh_loaded = true;
-    else
+        std::cout << "[Movement] Loaded navmesh: " << path << std::endl;
+    }
+    else {
         m_valid_navmesh_loaded = false;
+        std::cout << "[Movement] Failed to load navmesh: " << path << std::endl;
+    }
 }
 
 
@@ -188,8 +207,8 @@ bool MovementStrategy::load_in_navmesh(const std::string& filename)
         ifs.close();
         load_nodes(m_navmesh_json);
         load_edges(m_navmesh_json);
-       
-        
+        std::cout << "[Movement] Navmesh loaded with " << m_nodes.size()
+                  << " nodes" << std::endl;
     }
     catch (const std::exception& e)
     {

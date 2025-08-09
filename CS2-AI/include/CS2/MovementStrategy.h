@@ -14,15 +14,16 @@
 
 using nlohmann::json;
 
-class MovementStrategy 
+class MovementStrategy
 {
 public:
-	void update(GameInformationhandler* game_info_handler);
-	void handle_navmesh_load(const std::string& map_name);
-	bool load_in_navmesh(const std::string& filename);
-	void set_debug_print_route(bool value);
-	void reset_loaded_navmesh();
-	bool is_valid_navmesh_loaded() const;
+        MovementStrategy();
+        void update(GameInformationhandler* game_info_handler);
+        void handle_navmesh_load(const std::string& map_name);
+        bool load_in_navmesh(const std::string& filename);
+        void set_debug_print_route(bool value);
+        void reset_loaded_navmesh();
+        bool is_valid_navmesh_loaded() const;
 
 private:
 	std::shared_ptr<Node> get_node_by_id(int id) const;
@@ -37,12 +38,12 @@ private:
 	int m_stop_after_shoot_ms = 0; // 射击后多久恢复移动，单位ms，可调
 	json m_navmesh_json;
 	std::vector<std::shared_ptr<Node>> m_nodes;
-	std::shared_ptr<Node> m_next_node = nullptr;
-	std::vector<std::shared_ptr<Node>> m_current_route;
-	std::string m_loaded_map;
-	bool m_valid_navmesh_loaded;
-	long long m_delay_time = 0;
-	bool m_debug_print_route = false;
+        std::shared_ptr<Node> m_next_node = nullptr;
+        std::vector<std::shared_ptr<Node>> m_current_route;
+        std::string m_loaded_map;
+        bool m_valid_navmesh_loaded = false;
+        long long m_delay_time = 0;
+        bool m_debug_print_route = false;
 
 
 };
