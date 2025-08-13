@@ -11,6 +11,7 @@
 #include "GameInformationHandler.h"
 #include "Utility/Logging.h"
 #include "Utility/Dijkstra.h"
+#include <chrono>
 
 using nlohmann::json;
 
@@ -43,6 +44,20 @@ private:
 	bool m_valid_navmesh_loaded;
 	long long m_delay_time = 0;
 	bool m_debug_print_route = false;
+	// === 新增：工具方法声明 ===
+	std::shared_ptr<Node> pick_reachable_goal_node_fallback(
+		const Vec3D<float>& enemy_pos,
+		const std::shared_ptr<Node>& start_node,
+		const std::shared_ptr<Node>& end_node);
 
+	bool should_replan_due_to_no_progress(const Vec3D<float>& player_pos);
+
+	void align_view_to(GameInformationhandler* game_info_handler,
+		const Vec3D<float>& from_head_pos,
+		const Vec3D<float>& to_pos);
+
+	// === 新增：进度锚点成员（steady_clock！）===
+	Vec3D<float> m_progress_anchor_pos{ 0.f, 0.f, 0.f };
+	std::chrono::steady_clock::time_point m_progress_anchor_time{};
 
 };

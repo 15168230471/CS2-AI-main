@@ -34,6 +34,21 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), m_ui(new Ui::Main
 	on_checkBox_aimbot_stateChanged();
 	on_checkBox_triggerbot_stateChanged();
 	on_checkBox_movement_stateChanged();
+	// —— 启动时最小化 ——
+// 不抢焦点
+	setAttribute(Qt::WA_ShowWithoutActivating, true);
+	// 标记为最小化
+	setWindowState(windowState() | Qt::WindowMinimized);
+
+	// 立即调用 showMinimized（用 singleShot(0) 确保在 UI 初始化之后）
+	QTimer::singleShot(0, this, [this] {
+		this->showMinimized();
+#ifdef Q_OS_WIN
+		// Windows 下更“温和”的最小化，不激活窗口
+		::ShowWindow(HWND(this->winId()), SW_SHOWMINNOACTIVE);
+#endif
+		});
+
 
 }
 

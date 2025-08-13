@@ -173,7 +173,8 @@ void CS2Runner::perform_click_sequence(HWND hwnd)
     std::this_thread::sleep_for(std::chrono::milliseconds(rand_int(200, 400)));
 
     const POINT sequence[] = {
-        {803, 400},  // "确定"
+        {763, 406},  // "确定1"
+        {803, 400},  // "确定2"
         {785, 569},  // "关闭"
         {661, 18},   // "开始" 顶部
         {552, 56},   // "匹配"
@@ -218,38 +219,45 @@ void CS2Runner::terminate_process_by_name(const std::wstring& name)
 void CS2Runner::check_matchmaking_status()
 {
     auto now = std::chrono::steady_clock::now();
+   
     if (now - m_lastBackgroundCheck < kBackgroundCheckInterval)
         return;
     m_lastBackgroundCheck = now;
 
     bool background = is_background_map();
-    std::cout << "[INFO] BackgroundMap=" << (background ? "true" : "false") << std::endl;
+    std::cout << "[INFO] BackgroundMap=" << (background ? "true" : "false")
+        << " | attempt #" << m_backgroundClickCount << "/3\n";
 
     HWND hwnd = get_cs2_hwnd_from_config();
 
     if (background)
     {
-        if (!m_sequenceAttempted)
+        if (m_backgroundClickCount < 3)
         {
-            std::cout << "[INFO] First background detected, performing click sequence\n";
+            std::cout << "[INFO] Background detected, performing click sequence (attempt "
+                << (m_backgroundClickCount + 1) << "/3)\n";
             perform_click_sequence(hwnd);
-            m_sequenceAttempted = true;
+            m_backgroundClickCount++;
         }
         else
         {
-            std::cout << "[INFO] Background still present after prior sequence, terminating CS2/Steam and exiting\n";
+            std::cout << "[INFO] Background still present after 3 attempts, terminating CS2/Steam/self.\n";
             terminate_process_by_name(L"cs2.exe");
             terminate_process_by_name(L"steam.exe");
+            // 等待日志输出
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
             std::exit(0);
         }
     }
     else
     {
-        if (m_sequenceAttempted)
-            std::cout << "[INFO] Background cleared, resetting sequenceAttempted flag\n";
-        m_sequenceAttempted = false;
+        if (m_backgroundClickCount > 0)
+            std::cout << "[INFO] Entered game map, resetting background click count\n";
+        // 重置计数器，以便下次再从 0 开始尝试
+        m_backgroundClickCount = 0;
     }
 }
+
 
 void CS2Runner::check_map_team_Status()
 {
@@ -277,46 +285,63 @@ void CS2Runner::check_map_team_Status()
 
 void CS2Runner::log_rank_if_due()
 {
-    if (!m_attached)
-        return;
-
-    if (is_background_map())
-        return;
-
     auto now = std::chrono::steady_clock::now();
+    auto handler = m_cs2_ai_handler->get_game_info_handler();
+    if (!handler)
+        return;
+
+    // 1) 只在真正进到游戏里（team != 0）才尝试
+    auto gi = handler->get_game_information();
+    if (gi.controlled_player.team == 0)
+        return;
+
+    // —— 第一次：无条件读取并打印 —— 
+    if (m_last_recorded_rank < 0) {
+        int rank = handler->get_local_player_rank();
+        if (rank < 0) {
+            std::cout << "[RANK] failed to get rank\n";
+            return;
+        }
+        m_last_recorded_rank = rank;
+        m_last_rank_log = now;
+        std::cout << "[RANK] local player rank = " << rank << std::endl;
+        return;
+    }
+
+    // —— 之后：先检查间隔，不到 3 分钟直接返回 —— 
     if (now - m_last_rank_log < kRankLogInterval)
         return;
-    m_last_rank_log = now;
 
-    auto game_info_handler = m_cs2_ai_handler->get_game_info_handler();
-    if (!game_info_handler)
-        return;
-
-    int rank = game_info_handler->get_local_player_rank();
+    // —— 真·到时间了才读取并打印 —— 
+    int rank = handler->get_local_player_rank();
     if (rank < 0) {
         std::cout << "[RANK] failed to get rank\n";
+        // 即使失败，也更新时间，避免不停重试
+        m_last_rank_log = now;
         return;
     }
 
+    m_last_rank_log = now;
     std::cout << "[RANK] local player rank = " << rank << std::endl;
 
-    if (m_last_recorded_rank < 0) {
-        m_last_recorded_rank = rank;
-        return;
-    }
-
+    // 升级检测：比上次记录高，则退出
     if (rank > m_last_recorded_rank) {
-        std::cout << "[RANK] Detected rank increase: " << m_last_recorded_rank << " -> " << rank
+        std::cout << "[RANK] Detected rank increase: "
+            << m_last_recorded_rank << " -> " << rank
             << ", shutting down CS2/Steam/self.\n";
-
         terminate_process_by_name(L"cs2.exe");
         terminate_process_by_name(L"steam.exe");
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
         std::exit(0);
     }
 
+    // 更新记录
     m_last_recorded_rank = rank;
 }
+
+
+
+
 
 void CS2Runner::check_weapon_Status()
 {
@@ -333,7 +358,7 @@ void CS2Runner::check_weapon_Status()
         && weaponId != plan_weapon_id
         && health != 0)
     {
-        const WORD keys[] = { 'B', '3', '2', VK_ESCAPE };
+        const WORD keys[] = { 'B', '3', '2', 'B' };
         const int keyCount = 4;
 
         for (int i = 0; i < keyCount; ++i) {
@@ -378,22 +403,22 @@ void CS2Runner::update()
         return; // 未附加不继续依赖游戏信息的逻辑
     }
 
-    // 2. 段位/等级检查（优先于 background map，因为 background map 在主菜单会短路）
-    log_rank_if_due();
-
-    // 3. 背景图相关逻辑（短路在地图判断之前）
+    // 2. 背景图相关逻辑（短路在地图判断之前）
     check_matchmaking_status();
-    if (m_sequenceAttempted && is_background_map()) {
+    if (m_backgroundClickCount > 0 && is_background_map()) {
         return;
     }
-
-    // 4. 普通状态检查（如队伍/选人）
+    
+    // 3. 普通状态检查（如队伍/选人）
     auto now = std::chrono::steady_clock::now();
     if (now - m_lastStatusCheck >= m_statusCheckInterval) {
         m_lastStatusCheck = now;
         check_map_team_Status();
+        
     }
-
+    // 4. **只有当 team != 0 时才做 rank/log 检测**
+    log_rank_if_due();
+    
     // 5. 武器状态
     check_weapon_Status();
 

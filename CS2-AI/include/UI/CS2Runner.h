@@ -72,12 +72,16 @@ private:
     // 背景图检测和点击序列逻辑的节奏（比如 3 分钟检测一次 BackgroundMap）
     const std::chrono::minutes kBackgroundCheckInterval{ 3 };
     std::chrono::steady_clock::time_point m_lastBackgroundCheck{ std::chrono::steady_clock::now() - kBackgroundCheckInterval };
-    bool m_sequenceAttempted = false; // 记录是否已经执行过点击序列（第一次 vs 第二次行为不同）
+    int m_backgroundClickCount = 0; // 记录已经执行过点击序列的次数（第三次之后还不行就退出所有）
 
-    // 段位/等级输出周期（避免每帧刷）
-    const std::chrono::minutes kRankLogInterval{ 3 };
-    std::chrono::steady_clock::time_point m_last_rank_log{ std::chrono::steady_clock::now() };
-    int m_last_recorded_rank = -1; // 上一次有效的 rank / profile level，用于升级检测
+    // **次要：打印间隔常量，一定要是 3 分钟**  
+    static constexpr std::chrono::minutes kRankLogInterval{ 3 };
+
+    // 记录上次打印的时间点（默认构造为 steady_clock 的 epoch，保证第一次进来就打印）  
+    std::chrono::steady_clock::time_point m_last_rank_log{};
+
+    // 记录上次拿到的有效 rank，用 -1 表示“还没打印过”  
+    int m_last_recorded_rank = -1;
 
     // ================== 功能模块 ==================
 
