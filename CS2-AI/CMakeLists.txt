@@ -73,6 +73,7 @@ set(CS2_SOURCE
     "src/CS2/NavmeshPoints.cpp"
     "src/CS2/Offsets.cpp"
     "src/CS2/Triggerbot.cpp"
+    "src/CS2/KernelInterface.cpp"
 )
 
 set(UI_SOURCE
