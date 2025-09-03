@@ -280,6 +280,11 @@ std::optional<PlayerInformation> GameInformationhandler::read_player(uintptr_t e
 	ent.position = m_process_memory.read_memory<Vec3D<float>>(current_controller + m_offsets.position);
 	ent.health = m_process_memory.read_memory<DWORD>(current_controller + m_offsets.player_health_offset);
 	ent.team = m_process_memory.read_memory<int>(current_controller + m_offsets.team_offset);
+	// 计算 EntitySpottedState_t 地址
+	uintptr_t spottedStateAddr = current_controller + m_offsets.entity_spotted_state;
+	// 从 spottedStateAddr + 8 读取 m_bSpotted；如果在 offsets 中保存了二级偏移，可替换为 + m_offsets.entity_spotted_state_bSpotted
+	bool isSpotted = m_process_memory.read_memory<bool>(spottedStateAddr + 0x8);
+	ent.isSpotted = isSpotted;
 	ent.head_position = get_head_bone_position(current_controller);
 	ent.chest_position = get_chest_bone_position(current_controller);
 	ent.isImmune = m_process_memory.read_memory<uint8_t>(current_controller + m_offsets.gun_game_immunity);

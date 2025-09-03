@@ -155,7 +155,12 @@ void Aimbot::update(GameInformationhandler* info_handler) {
 
     if (!target_enemy)
         return;
-
+    // 新增：只有目标被标记为已暴露（IsSpotted）才继续瞄准
+    if (!target_enemy->isSpotted) {
+        // 如果想完全忽略未暴露的敌人，可以直接返回，让移动模块控制视角
+        return;
+        // 如果想在未暴露时让视角跟随路径，也可以在这里调用自定义函数调整视角（见第4步）
+    }
 
 
     // 瞄准逻辑

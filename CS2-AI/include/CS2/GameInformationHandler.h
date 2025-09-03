@@ -50,6 +50,7 @@ struct PlayerInformation
 	bool isImmune;
 	DWORD shots_fired;
 	uintptr_t pawn_addr;
+	bool isSpotted = false;
 };
 
 

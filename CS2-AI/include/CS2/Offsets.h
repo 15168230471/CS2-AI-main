@@ -38,6 +38,8 @@ public:
 	uintptr_t m_iClip1;
 	uintptr_t m_pInventoryServices;                // C_CSPlayerController 里指向 InventoryServices 组件的指针
 	uintptr_t m_rank;
+	uintptr_t entity_spotted_state;
+	uintptr_t entity_spotted_state_bSpotted;
 };
 
 std::optional <Offsets> load_offsets_from_files();

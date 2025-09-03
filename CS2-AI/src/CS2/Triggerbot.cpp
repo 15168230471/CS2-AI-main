@@ -136,10 +136,10 @@ void Triggerbot::update(GameInformationhandler* handler)
     bool targetImmune = game_info.player_in_crosshair->isImmune;
     if (targetHealth <= 0 || targetHealth >= 200 || targetImmune)
         return;
-
+   
     if (randProb() > REACT_PROBABILITY)
         return;
-
+    
     // 近距离优先快速反应
     float dist = game_info.controlled_player.position.distance(game_info.player_in_crosshair->position);
     int reactDelay;

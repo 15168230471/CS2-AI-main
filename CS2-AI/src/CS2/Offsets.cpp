@@ -308,6 +308,13 @@ std::optional<Offsets> load_offsets_from_files() {
                 client_offsets_json["client.dll"]["classes"]["CCSPlayerController_InventoryServices"]["fields"]["m_nPersonaDataPublicLevel"],
                 "client_dll.json: CCSPlayerController_InventoryServices.fields.m_nPersonaDataPublicLevel"));
 
+        offsets.entity_spotted_state = static_cast<uintptr_t>(
+            client_offsets_json["client.dll"]["classes"]["C_CSPlayerPawn"]["fields"]["m_entitySpottedState"]);
+        // 可选：如果希望从 JSON 获取内部偏移，也可以读 EntitySpottedState_t 中的 m_bSpotted（值为 8）
+        offsets.entity_spotted_state_bSpotted = static_cast<uintptr_t>(
+            client_offsets_json["client.dll"]["classes"]["EntitySpottedState_t"]["fields"]["m_bSpotted"]);
+
+
         // ---- buttons.json ----
         offsets.force_attack =
             static_cast<uintptr_t>(require_u64(buttons_offsets_json["client.dll"]["attack"],
