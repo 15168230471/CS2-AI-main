@@ -1,36 +1,21 @@
-#include "CS2/MovementStrategy.h" 
-#include "Utility/Utility.h"
-#include "Utility/Vec3D.h"
-#include "Utility/json.hpp"
-#include "CS2/GameInformationhandler.h"
-#include "Utility/Logging.h"
-#include "Utility/Dijkstra.h"
+#include "CS2/MovementStrategy.h"
 
 #include <algorithm>
-#include <fstream>
-#include <iostream>
+#include <filesystem>
+#include <optional>
+#include <sstream>
 #include <cfloat>
 #include <cmath>
-#include <chrono>
-#include <sstream>
-#include <vector>
-#include <filesystem>
 #include <cstdio>
 #include <cerrno>
 #include <system_error>
 #include <queue>
-#include <optional>
-#include <unordered_map>
 #include <limits>
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#ifdef _WIN32
-#include <windows.h>
-#endif
+// 触发器标记 g_just_fired
+#include "CS2/Triggerbot.h"
 
-// [ADD] 防止 min/max 宏污染 <algorithm> 的 std::min/max
+// 防止 Windows 宏污染
 #ifdef min
 #undef min
 #endif
@@ -38,46 +23,19 @@
 #undef max
 #endif
 
-#include "CS2/Triggerbot.h"
-
-using nlohmann::json;
-
-// 全局稳态时钟别名（避免与某些头冲突）
 using SteadyClock = std::chrono::steady_clock;
 
 // ================== 小工具 ==================
-static inline std::string now_ms_str() {
-    using namespace std::chrono;
-    const auto ms = duration_cast<milliseconds>(SteadyClock::now().time_since_epoch()).count();
-    return std::to_string(ms);
+static inline bool finite3(const Vec3D<float>& v) {
+    return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 }
-template<typename T>
-static inline std::string vec3_to_str(const Vec3D<T>& v) {
-    std::ostringstream oss;
-    oss << "(" << v.x << ", " << v.y << ", " << v.z << ")";
-    return oss.str();
-}
-static inline void mv_log(const std::string& tag, const std::string& msg) {
-    std::cout << "[" << now_ms_str() << "] " << tag << " " << msg << std::endl;
-}
-
-// 角度工具：统一规范化
 static inline float norm_deg_0_360(float a) {
     if (!std::isfinite(a)) return 0.0f;
     a = std::fmod(a, 360.0f);
     if (a < 0.0f) a += 360.0f;
     return a;
 }
-static inline float shortest_delta_deg(float from_deg, float to_deg) {
-    float a = norm_deg_0_360(from_deg);
-    float b = norm_deg_0_360(to_deg);
-    float d = b - a;
-    if (d > 180.0f) d -= 360.0f;
-    if (d < -180.0f) d += 360.0f;
-    return d; // [-180, 180]
-}
 
-// ================== 路径解析 ==================
 static std::filesystem::path resolve_navmesh_path(const std::string& processed)
 {
     namespace fs = std::filesystem;
@@ -113,17 +71,19 @@ std::shared_ptr<Node> MovementStrategy::pick_reachable_goal_node_fallback(
     if (!start_node) return nullptr;
 
     auto dist_to_enemy = [&](const std::shared_ptr<Node>& n) {
-        return n ? n->position.distance(enemy_pos) : FLT_MAX;
+        return (n ? n->position.distance(enemy_pos) : FLT_MAX);
         };
 
     if (end_node) {
         std::vector<std::shared_ptr<Node>> candidates;
+        candidates.reserve(end_node->edges.size());
         for (auto& e : end_node->edges) {
             auto to_node = e.toNode;
-            if (to_node && (!start_node || to_node->id != start_node->id)) {
+            if (to_node && to_node->id != start_node->id) {
                 candidates.push_back(to_node);
             }
         }
+        candidates.erase(std::remove(candidates.begin(), candidates.end(), nullptr), candidates.end());
         std::sort(candidates.begin(), candidates.end(),
             [&](const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) {
                 return dist_to_enemy(a) < dist_to_enemy(b);
@@ -131,21 +91,22 @@ std::shared_ptr<Node> MovementStrategy::pick_reachable_goal_node_fallback(
 
         for (auto& c : candidates) {
             auto route = Dijkstra::get_route(start_node, c);
-            if (route.size() > 1) {
+            if (route.size() > 1 && route[1]) {
                 return c;
             }
         }
     }
 
     std::vector<std::shared_ptr<Node>> all = m_nodes;
+    all.erase(std::remove(all.begin(), all.end(), nullptr), all.end());
     std::sort(all.begin(), all.end(),
         [&](const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) {
             return dist_to_enemy(a) < dist_to_enemy(b);
         });
     for (auto& c : all) {
-        if (!c || (start_node && c->id == start_node->id)) continue;
+        if (!c || c->id == start_node->id) continue;
         auto route = Dijkstra::get_route(start_node, c);
-        if (route.size() > 1) {
+        if (route.size() > 1 && route[1]) {
             return c;
         }
     }
@@ -187,17 +148,34 @@ bool MovementStrategy::should_replan_due_to_no_progress(const Vec3D<float>& play
 // ================ 核心：Update =================
 void MovementStrategy::update(GameInformationhandler* game_info_handler)
 {
-    try {
-        if (!game_info_handler) return;
+    // 重入保护：避免多线程/重入带来的竞态
+    if (m_in_update) return;
+    m_in_update = true;
 
-        const GameInformation gi = game_info_handler->get_game_information();
+    try {
+        if (!game_info_handler) { m_in_update = false; return; }
+
+        const GameInformation gi = game_info_handler->get_game_information(); // 单帧快照
         const auto now_ms = get_current_time_in_ms();
         auto now = SteadyClock::now();
 
+        // 早期坐标有限性防御
+        if (!finite3(gi.controlled_player.position) ||
+            !finite3(gi.controlled_player.head_position)) {
+            game_info_handler->set_player_movement(Movement{});
+            m_in_update = false; return;
+        }
+
         // -------- 导航网格 --------
-        handle_navmesh_load(gi.current_map);
+        bool just_reloaded = handle_navmesh_load(gi.current_map);
         if (!m_valid_navmesh_loaded) {
-            return;
+            m_in_update = false; return;
+        }
+        if (just_reloaded) {
+            // 防止 mid-frame 悬挂
+            m_next_node = nullptr;
+            game_info_handler->set_player_movement(Movement{});
+            m_in_update = false; return;
         }
 
         // -------- 刚开火的停走保护 --------
@@ -206,7 +184,7 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             g_just_fired = false;
             m_next_node = nullptr;
             game_info_handler->set_player_movement(Movement{});
-            return;
+            m_in_update = false; return;
         }
         {
             int elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_shoot_time).count();
@@ -214,7 +192,7 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             if (left > 0) {
                 m_next_node = nullptr;
                 game_info_handler->set_player_movement(Movement{});
-                return;
+                m_in_update = false; return;
             }
         }
 
@@ -238,16 +216,20 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
 
         if (!has_enemy || !alive) {
             game_info_handler->set_player_movement(Movement{});
-            return;
+            m_in_update = false; return;
         }
         if (now_ms < m_delay_time) {
             game_info_handler->set_player_movement(Movement{});
-            return;
+            m_in_update = false; return;
         }
 
         // -------- 关键位置 --------
         const Vec3D<float>& player_pos = gi.controlled_player.position;
         const Vec3D<float>& enemy_pos = gi.closest_enemy_player->position;
+        if (!finite3(enemy_pos)) {
+            game_info_handler->set_player_movement(Movement{});
+            m_in_update = false; return;
+        }
 
         // -------- 路径规划 --------
         if (!m_next_node)
@@ -257,24 +239,24 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
 
             if (!start_node) {
                 game_info_handler->set_player_movement(Movement{});
-                return;
+                m_in_update = false; return;
             }
 
             std::vector<std::shared_ptr<Node>> route;
             if (end_node) route = Dijkstra::get_route(start_node, end_node);
 
-            if (route.size() <= 1) {
+            if (route.size() <= 1 || (route.size() > 1 && !route[1])) {
                 auto alt_goal = pick_reachable_goal_node_fallback(enemy_pos, start_node, end_node);
                 if (alt_goal) {
                     m_current_route = Dijkstra::get_route(start_node, alt_goal);
-                    if (m_current_route.size() > 1) {
+                    if (m_current_route.size() > 1 && m_current_route[1]) {
                         m_next_node = m_current_route[1];
                     }
                     else {
                         m_next_node = nullptr;
                         game_info_handler->set_player_movement(Movement{});
-                        align_view_to(game_info_handler, gi.controlled_player.head_position, alt_goal->position);
-                        return;
+                        align_view_to(gi, gi.controlled_player.head_position, alt_goal->position);
+                        m_in_update = false; return;
                     }
                 }
                 else {
@@ -290,25 +272,25 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                         }
                         if (best) {
                             m_current_route = Dijkstra::get_route(start_node, best);
-                            if (m_current_route.size() > 1) {
+                            if (m_current_route.size() > 1 && m_current_route[1]) {
                                 m_next_node = m_current_route[1];
                             }
                         }
                     }
                     if (!m_next_node) {
-                        align_view_to(game_info_handler, gi.controlled_player.head_position, enemy_pos);
+                        align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
                         game_info_handler->set_player_movement(Movement{});
-                        return;
+                        m_in_update = false; return;
                     }
                 }
             }
             else {
                 m_current_route = route;
-                m_next_node = (m_current_route.size() > 1 ? m_current_route[1] : nullptr);
+                m_next_node = (m_current_route.size() > 1 && m_current_route[1] ? m_current_route[1] : nullptr);
                 if (!m_next_node) {
-                    align_view_to(game_info_handler, gi.controlled_player.head_position, enemy_pos);
+                    align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
                     game_info_handler->set_player_movement(Movement{});
-                    return;
+                    m_in_update = false; return;
                 }
             }
 
@@ -320,57 +302,55 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
         if (should_replan_due_to_no_progress(player_pos)) {
             m_next_node = nullptr;
             game_info_handler->set_player_movement(Movement{});
-            return;
+            m_in_update = false; return;
         }
 
-        // -------- 抖动抑制 + 黑名单 --------
-        static int   last_node_id = -1;
-        static int   prev_node_id = -1;
-        static auto  last_switch_time = SteadyClock::now();
-        static int   oscillation_streak = 0;
-        static std::unordered_map<int, SteadyClock::time_point> ban_until;
-
+        // -------- 抖动抑制 + 黑名单（成员变量版本）--------
         auto nowt = SteadyClock::now();
         auto is_banned = [&](int id) -> bool {
-            auto it = ban_until.find(id);
-            return it != ban_until.end() && it->second > nowt;
+            auto it = m_ban_until.find(id);
+            return it != m_ban_until.end() && it->second > nowt;
             };
         auto ban_node = [&](int id, int ms) {
-            if (id >= 0) ban_until[id] = nowt + std::chrono::milliseconds(ms);
+            if (id >= 0) m_ban_until[id] = nowt + std::chrono::milliseconds(ms);
             };
+
+        if (m_last_switch_time.time_since_epoch().count() == 0) {
+            m_last_switch_time = nowt;
+        }
 
         if (m_next_node) {
             int nid = m_next_node->id;
 
-            if (nid != last_node_id) {
-                if (nid == prev_node_id &&
-                    std::chrono::duration_cast<std::chrono::milliseconds>(nowt - last_switch_time).count() < 10000) {
-                    oscillation_streak++;
+            if (nid != m_last_node_id) {
+                if (nid == m_prev_node_id &&
+                    std::chrono::duration_cast<std::chrono::milliseconds>(nowt - m_last_switch_time).count() < 10000) {
+                    m_oscillation_streak++;
                 }
                 else {
-                    oscillation_streak = 0;
+                    m_oscillation_streak = 0;
                 }
-                prev_node_id = last_node_id;
-                last_node_id = nid;
-                last_switch_time = nowt;
+                m_prev_node_id = m_last_node_id;
+                m_last_node_id = nid;
+                m_last_switch_time = nowt;
             }
 
-            if (oscillation_streak >= 2) {
-                ban_node(last_node_id, 2500);
-                ban_node(prev_node_id, 2500);
-                oscillation_streak = 0;
+            if (m_oscillation_streak >= 2) {
+                ban_node(m_last_node_id, 2500);
+                ban_node(m_prev_node_id, 2500);
+                m_oscillation_streak = 0;
 
                 m_current_route.clear();
                 m_next_node = nullptr;
                 game_info_handler->set_player_movement(Movement{});
-                return;
+                m_in_update = false; return;
             }
 
             if (is_banned(nid)) {
                 m_current_route.clear();
                 m_next_node = nullptr;
                 game_info_handler->set_player_movement(Movement{});
-                return;
+                m_in_update = false; return;
             }
         }
 
@@ -400,17 +380,27 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                 else {
                     if (std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now() - last_step_switch).count()
                         >= STEP_SWITCH_COOLDOWN_MS) {
+
                         auto it = std::find(m_current_route.begin(), m_current_route.end(), m_next_node);
-                        if (it != m_current_route.end() && (it + 1) != m_current_route.end()) {
-                            m_next_node = *(it + 1);
-                            last_step_switch = SteadyClock::now();
-                            mv = calculate_move_info(gi, m_next_node);
+                        if (it != m_current_route.end()) {
+                            auto it2 = it; ++it2;
+                            if (it2 != m_current_route.end() && *it2) {
+                                m_next_node = *it2;
+                                last_step_switch = SteadyClock::now();
+                                mv = calculate_move_info(gi, m_next_node);
+                            }
+                            else {
+                                m_next_node = nullptr;
+                                mv = Movement{};
+                            }
+                            in_near = true;
                         }
                         else {
+                            // 当前节点不在路径中，重置
                             m_next_node = nullptr;
                             mv = Movement{};
+                            in_near = false;
                         }
-                        in_near = true;
                     }
                     else {
                         mv = Movement{};
@@ -423,13 +413,13 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                 }
             }
 
-            // 视角对齐“行走目标节点”（若最近敌人已被发现则不抢视角）
-            align_view_to(game_info_handler, gi.controlled_player.head_position, m_next_node->position);
+            // 视角对齐“行走目标节点”（最近敌人若 isSpotted==true，会在 align_view_to 内短路）
+            align_view_to(gi, gi.controlled_player.head_position, m_next_node->position);
         }
 
         game_info_handler->set_player_movement(mv);
 
-        // -------- 额外卡住检测 --------
+        // -------- 额外卡住检测（重点加固）--------
         static Vec3D<float> anchor_pos;
         static auto anchor_time = SteadyClock::now();
         static bool anchor_active = false;
@@ -448,32 +438,42 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             }
             else {
                 if (dtms > TIMEOUT_MS && moved < POS_DELTA) {
-                    std::vector<std::shared_ptr<Node>> sorted_nodes = m_nodes;
-                    std::sort(sorted_nodes.begin(), sorted_nodes.end(),
-                        [&player_pos](const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) {
-                            return a->position.distance(player_pos) > b->position.distance(player_pos);
-                        });
-
-                    for (const auto& n : sorted_nodes) {
+                    // 安全筛选候选点：去空、去坐标无效、去当前/最近反复点/黑名单
+                    std::vector<std::shared_ptr<Node>> candidates;
+                    candidates.reserve(m_nodes.size());
+                    for (const auto& n : m_nodes) {
                         if (!n) continue;
-                        if (is_banned(n->id)) continue;
+                        if (!finite3(n->position)) continue;
                         if (m_next_node && n->id == m_next_node->id) continue;
-                        if (n->id == last_node_id || n->id == prev_node_id) continue;
+                        if (n->id == m_last_node_id || n->id == m_prev_node_id) continue;
+                        auto itb = m_ban_until.find(n->id);
+                        if (itb != m_ban_until.end() && itb->second > SteadyClock::now()) continue;
+                        candidates.push_back(n);
+                    }
 
-                        auto start = get_closest_node_to_position(player_pos);
-                        if (!start) break;
+                    if (!candidates.empty()) {
+                        std::sort(candidates.begin(), candidates.end(),
+                            [&player_pos](const std::shared_ptr<Node>& a, const std::shared_ptr<Node>& b) {
+                                // 近到远
+                                return a->position.distance(player_pos) < b->position.distance(player_pos);
+                            });
 
-                        auto route = Dijkstra::get_route(start, n);
-                        std::shared_ptr<Node> step = nullptr;
-                        for (size_t i = 1; i < route.size(); ++i) {
-                            if (route[i]) {
-                                if (!is_banned(route[i]->id)) { step = route[i]; break; }
+                        // 限制尝试数量，避免极端情况下长时间卡在这儿
+                        const size_t MAX_TRY = std::min<size_t>(candidates.size(), 64);
+                        for (size_t i = 0; i < MAX_TRY; ++i) {
+                            auto n = candidates[i];
+                            auto start = get_closest_node_to_position(player_pos);
+                            if (!start) break;
+                            auto route = Dijkstra::get_route(start, n);
+                            std::shared_ptr<Node> step = nullptr;
+                            for (size_t j = 1; j < route.size(); ++j) {
+                                if (route[j]) { step = route[j]; break; }
                             }
-                        }
-                        if (step) {
-                            m_current_route = route;
-                            m_next_node = step;
-                            break;
+                            if (step) {
+                                m_current_route = route;
+                                m_next_node = step;
+                                break;
+                            }
                         }
                     }
 
@@ -489,7 +489,6 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
         else {
             anchor_active = false;
         }
-
     }
     catch (const std::exception& e) {
         m_next_node = nullptr;
@@ -499,7 +498,10 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
     catch (...) {
         m_next_node = nullptr;
         if (game_info_handler) game_info_handler->set_player_movement(Movement{});
+        Logging::log_error("Unknown C++ exception in MovementStrategy::update");
     }
+
+    m_in_update = false;
 }
 
 // ============== 鼠标相对移动 ==============
@@ -519,19 +521,16 @@ static void move_mouse_relative(float dx, float dy)
 }
 
 // 仅在最近敌人 isSpotted != true 时启用；使用 Aimbot 的 FAST 模式参数
-void MovementStrategy::align_view_to(GameInformationhandler* game_info_handler,
+void MovementStrategy::align_view_to(
+    const GameInformation& gi,
     const Vec3D<float>& from_head_pos,
     const Vec3D<float>& to_pos)
 {
-    if (!game_info_handler) return;
-
-    const GameInformation gi = game_info_handler->get_game_information();
-
-    // 只有在最近敌人存在 且 未被标记(isSpotted != true) 时才转视角
     if (!gi.closest_enemy_player.has_value()) return;
     if (gi.closest_enemy_player->isSpotted)   return;
 
-    // 目标水平朝向（与 Aimbot::calc_view_vec_aim_to_head 一致：+180° 后归一化）
+    if (!finite3(from_head_pos) || !finite3(to_pos)) return;
+
     Vec3D<float> dir = to_pos - from_head_pos;
     if (!std::isfinite(dir.x) || !std::isfinite(dir.y)) return;
 
@@ -541,30 +540,22 @@ void MovementStrategy::align_view_to(GameInformationhandler* game_info_handler,
 
     float current_yaw = gi.controlled_player.view_vec.y;
 
-    // [-180°, 180°] 的最短角差（与 Aimbot 相同写法）
     float dx_raw = target_yaw - current_yaw;
     if (dx_raw > 180.0f)  dx_raw -= 360.0f;
     if (dx_raw < -180.0f) dx_raw += 360.0f;
 
-    // ——FAST 模式参数（取自你的 Aimbot）——
-    constexpr float FAST_MAX_STEP = 10.0f; // 每次角度步长上限（度）
-    constexpr float FAST_SENSITIVITY = 16.0f; // 角度->鼠标计数
-    constexpr float X_SIGN = +1.0f; // 若左右反了，把 +1.0 改成 -1.0
+    constexpr float FAST_MAX_STEP = 1.0f;
+    constexpr float FAST_SENSITIVITY = 16.0f;
+    constexpr float X_SIGN = +1.0f;
 
-    // 始终按快速模式推进（不做慢速/预测/门槛）
     float dx_l = std::clamp(dx_raw, -FAST_MAX_STEP, FAST_MAX_STEP);
     float dx_fast = X_SIGN * dx_l * FAST_SENSITIVITY;
 
-    // 只改水平（yaw）
     move_mouse_relative(dx_fast, 0.0f);
 }
 
-
-
-
-
 // ================== 地图加载 ==================
-void MovementStrategy::handle_navmesh_load(const std::string& map_name)
+bool MovementStrategy::handle_navmesh_load(const std::string& map_name)
 {
     static const std::vector<std::string> invalid_maps = { "", "SNDLVL_35dB" };
 
@@ -581,14 +572,14 @@ void MovementStrategy::handle_navmesh_load(const std::string& map_name)
     }
     auto stable_ms = std::chrono::duration_cast<std::chrono::milliseconds>(SteadyClock::now() - pending_since).count();
     if (stable_ms < 250) {
-        return;
+        return false; // 未稳定，不加载
     }
 
     if (is_invalid(pending_map)) {
-        return;
+        return false;
     }
 
-    if (pending_map == m_loaded_map) return;
+    if (pending_map == m_loaded_map) return false; // 无变化
 
     m_loaded_map = pending_map;
     std::string processed = m_loaded_map;
@@ -601,6 +592,7 @@ void MovementStrategy::handle_navmesh_load(const std::string& map_name)
     else {
         m_valid_navmesh_loaded = false;
     }
+    return true; // 本帧进行了加载尝试（成功与否均算）
 }
 
 // ================== Navmesh 读取 ==================
@@ -716,6 +708,8 @@ Movement MovementStrategy::calculate_move_info(
     const auto& head = game_info.controlled_player.head_position;
     const auto& tgt = node->position;
 
+    if (!finite3(head) || !finite3(tgt)) return stop;
+
     float pos_ang = calc_angle_between_two_positions(head, tgt); // [-180,180]
     pos_ang = norm_deg_0_360(pos_ang);
 
@@ -802,7 +796,6 @@ void MovementStrategy::load_nodes(const json& js)
 
 void MovementStrategy::load_edges(const json& js)
 {
-    size_t edge_cnt = 0;
     try {
         if (!js.contains("edges") || !js["edges"].is_array()) {
             return;
@@ -823,7 +816,6 @@ void MovementStrategy::load_edges(const json& js)
             auto to = get_node_by_id(to_id);
             if (from && to) {
                 from->edges.push_back(Node::Edge{ w, to });
-                ++edge_cnt;
             }
         }
     }
@@ -839,7 +831,7 @@ void MovementStrategy::load_edges(const json& js)
 std::shared_ptr<Node> MovementStrategy::get_node_by_id(int id) const
 {
     for (const auto& n : m_nodes)
-        if (n->id == id) return n;
+        if (n && n->id == id) return n;
     return nullptr;
 }
 
