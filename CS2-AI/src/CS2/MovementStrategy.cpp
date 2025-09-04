@@ -1,3 +1,6 @@
+// Modified MovementStrategy implementation with additional debug logging and safety checks
+
+// Original includes and declarations
 #include "CS2/MovementStrategy.h"
 
 #include <algorithm>
@@ -24,6 +27,25 @@
 #endif
 
 using SteadyClock = std::chrono::steady_clock;
+
+//
+// Debug support:
+//
+// A simple flag to enable or disable verbose logging.  When set to true,
+// MovementStrategy::update will emit detailed information about the current
+// player position, enemy position, selected nodes and route lengths.  This
+// can be useful when trying to diagnose crashes or unexpected behaviour at
+// runtime.  By default the flag is false to avoid spamming the log.
+//
+static bool g_debug_logging_enabled = false;
+
+// Helper to print debug information.  Uses Logging::log_error since a
+// dedicated log_debug function may not exist.  Guarded by
+// g_debug_logging_enabled so it can be toggled at runtime if needed.
+static void debug_log(const std::string& msg) {
+    if (!g_debug_logging_enabled) return;
+    Logging::log_error(msg);
+}
 
 // ================== 小工具 ==================
 static inline bool finite3(const Vec3D<float>& v) {
@@ -231,6 +253,25 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             m_in_update = false; return;
         }
 
+        // Debug logging: output key positions and states
+        {
+            std::ostringstream oss;
+            oss << "[MovementStrategy] update: player_pos=(" << player_pos.x << "," << player_pos.y << "," << player_pos.z << ")";
+            if (has_enemy) {
+                oss << " enemy_pos=(" << enemy_pos.x << "," << enemy_pos.y << "," << enemy_pos.z << ")";
+            }
+            else {
+                oss << " enemy_pos=(N/A)";
+            }
+            if (m_next_node) {
+                oss << " m_next_node_id=" << m_next_node->id;
+            }
+            else {
+                oss << " m_next_node_id=null";
+            }
+            debug_log(oss.str());
+        }
+
         // -------- 路径规划 --------
         if (!m_next_node)
         {
@@ -255,7 +296,16 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                     else {
                         m_next_node = nullptr;
                         game_info_handler->set_player_movement(Movement{});
-                        align_view_to(gi, gi.controlled_player.head_position, alt_goal->position);
+                        // 调整视角到备用目标节点
+                        try {
+                            align_view_to(gi, gi.controlled_player.head_position, alt_goal->position);
+                        }
+                        catch (const std::exception& e) {
+                            Logging::log_error(std::string("align_view_to exception: ") + e.what());
+                        }
+                        catch (...) {
+                            Logging::log_error("Unknown exception in align_view_to");
+                        }
                         m_in_update = false; return;
                     }
                 }
@@ -278,7 +328,16 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                         }
                     }
                     if (!m_next_node) {
-                        align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
+                        // 调整视角到敌人位置
+                        try {
+                            align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
+                        }
+                        catch (const std::exception& e) {
+                            Logging::log_error(std::string("align_view_to exception: ") + e.what());
+                        }
+                        catch (...) {
+                            Logging::log_error("Unknown exception in align_view_to");
+                        }
                         game_info_handler->set_player_movement(Movement{});
                         m_in_update = false; return;
                     }
@@ -288,7 +347,16 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                 m_current_route = route;
                 m_next_node = (m_current_route.size() > 1 && m_current_route[1] ? m_current_route[1] : nullptr);
                 if (!m_next_node) {
-                    align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
+                    // 调整视角到敌人位置
+                    try {
+                        align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
+                    }
+                    catch (const std::exception& e) {
+                        Logging::log_error(std::string("align_view_to exception: ") + e.what());
+                    }
+                    catch (...) {
+                        Logging::log_error("Unknown exception in align_view_to");
+                    }
                     game_info_handler->set_player_movement(Movement{});
                     m_in_update = false; return;
                 }
@@ -414,7 +482,24 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             }
 
             // 视角对齐“行走目标节点”（最近敌人若 isSpotted==true，会在 align_view_to 内短路）
-            align_view_to(gi, gi.controlled_player.head_position, m_next_node->position);
+            if (m_next_node) {
+                try {
+                    // Record debug info about alignment
+                    {
+                        std::ostringstream oss;
+                        oss << "[MovementStrategy] aligning view to node id=" << m_next_node->id;
+                        oss << " at (" << m_next_node->position.x << "," << m_next_node->position.y << "," << m_next_node->position.z << ")";
+                        debug_log(oss.str());
+                    }
+                    align_view_to(gi, gi.controlled_player.head_position, m_next_node->position);
+                }
+                catch (const std::exception& e) {
+                    Logging::log_error(std::string("align_view_to exception: ") + e.what());
+                }
+                catch (...) {
+                    Logging::log_error("Unknown exception in align_view_to");
+                }
+            }
         }
 
         game_info_handler->set_player_movement(mv);
@@ -526,10 +611,19 @@ void MovementStrategy::align_view_to(
     const Vec3D<float>& from_head_pos,
     const Vec3D<float>& to_pos)
 {
+    // 入参校验：如果没有敌人或敌人已被观察到，直接返回
     if (!gi.closest_enemy_player.has_value()) return;
     if (gi.closest_enemy_player->isSpotted)   return;
 
     if (!finite3(from_head_pos) || !finite3(to_pos)) return;
+
+    // Debug logging: print vectors involved in aligning the view
+    {
+        std::ostringstream oss;
+        oss << "[MovementStrategy] align_view_to from=(" << from_head_pos.x << "," << from_head_pos.y << "," << from_head_pos.z << ")";
+        oss << " to=(" << to_pos.x << "," << to_pos.y << "," << to_pos.z << ")";
+        debug_log(oss.str());
+    }
 
     Vec3D<float> dir = to_pos - from_head_pos;
     if (!std::isfinite(dir.x) || !std::isfinite(dir.y)) return;
@@ -544,14 +638,70 @@ void MovementStrategy::align_view_to(
     if (dx_raw > 180.0f)  dx_raw -= 360.0f;
     if (dx_raw < -180.0f) dx_raw += 360.0f;
 
-    constexpr float FAST_MAX_STEP = 1.0f;
-    constexpr float FAST_SENSITIVITY = 16.0f;
-    constexpr float X_SIGN = +1.0f;
+    // ---------------------------------------------------------------------------------
+    // 使用借鉴自 Aimbot 的瞄准逻辑：根据误差大小在快速模式和平滑模式之间切换。
+    // 当 yaw 误差较大时，采用快速模式以最大幅度快速调整；当误差较小时，采用
+    // 时间相关的平滑模式逐渐逼近目标，减小抖动。
+    // ---------------------------------------------------------------------------------
 
-    float dx_l = std::clamp(dx_raw, -FAST_MAX_STEP, FAST_MAX_STEP);
-    float dx_fast = X_SIGN * dx_l * FAST_SENSITIVITY;
+    float error_mag = std::fabs(dx_raw);
 
-    move_mouse_relative(dx_fast, 0.0f);
+    // 静态变量用于跨帧保存上一次更新时间和平滑后的 dx
+    static auto last_time = SteadyClock::now();
+    static float smoothed_dx = 0.0f;
+
+    // 快速模式阈值和参数：依据 Aimbot 的设定
+    // 定义进入和退出快速模式的两个阈值：当误差位于 [FAST_ENTER_THRESHOLD, FAST_MAX_ENTER_THRESHOLD]
+    // 区间内时启用快速模式，否则使用平滑模式。通过设置非零的 FAST_ENTER_THRESHOLD 可避免误差极小
+    // 时持续抖动。
+    constexpr float FAST_ENTER_THRESHOLD = 2.0f;    // 误差低于此值时不启用快速模式
+    constexpr float FAST_MAX_ENTER_THRESHOLD = 140.0f; // 误差高于此值时也不启用快速模式（极端情况）
+    constexpr float FAST_MAX_STEP = 10.0f;       // 对应 Aimbot::FAST_MAX_STEP
+    constexpr float FAST_SENSITIVITY = 16.0f;    // 对应 Aimbot::FAST_SENSITIVITY
+    // 快速模式下最大像素移动量，按照 FAST_MAX_STEP * FAST_SENSITIVITY 计算
+    constexpr float MAX_PIXEL_MOVE_FAST = FAST_MAX_STEP * FAST_SENSITIVITY; // 约 160 像素
+
+    // 平滑模式参数：依据 Aimbot::SMOOTHING_TIME 与 MOUSE_SENSITIVITY
+    constexpr float SMOOTHING_TIME = 0.13f;      // 对应 Aimbot::SMOOTHING_TIME
+    constexpr float MOUSE_SENSITIVITY = 16.0f;   // 对应 Aimbot::MOUSE_SENSITIVITY
+    // 平滑模式角度步进上限，对应 Aimbot::MAX_STEP，用于限制每帧可偏移的角度幅度
+    constexpr float MAX_STEP = 1.2f;
+    // 平滑模式下的最大鼠标位移。为了避免平滑模式在大误差时位移过大导致抖动，这里设定为
+    // 快速模式上限的四分之一，可根据实际情况微调。例如 FAST_MAX_STEP*FAST_SENSITIVITY/4 ≈ 40
+    constexpr float MAX_PIXEL_MOVE_SMOOTH = (MAX_STEP * MOUSE_SENSITIVITY);
+
+    
+
+    auto now_tp = SteadyClock::now();
+
+    if (error_mag >= FAST_ENTER_THRESHOLD && error_mag <= FAST_MAX_ENTER_THRESHOLD) {
+        // 快速模式：误差落在阈值区间内，直接按最大步进移动
+        float dx_l = std::clamp(dx_raw, -FAST_MAX_STEP, FAST_MAX_STEP);
+        float dx_fast = dx_l * FAST_SENSITIVITY;
+        dx_fast = std::clamp(dx_fast, -MAX_PIXEL_MOVE_FAST, MAX_PIXEL_MOVE_FAST);
+        move_mouse_relative(dx_fast, 0.0f);
+        // 重置平滑变量以避免模式切换时的跳跃
+        smoothed_dx = dx_fast;
+        last_time = now_tp;
+    }
+    else {
+        // 平滑模式：误差在阈值范围外，使用时间相关的指数平滑
+        double dt = std::chrono::duration<double>(now_tp - last_time).count();
+        float alpha = static_cast<float>(dt / (SMOOTHING_TIME + dt));
+        // 根据误差大小动态调整速度缩放，误差越大，移动速度越快
+        float speedScale = std::clamp(error_mag / 45.0f, 0.5f, 1.5f);
+        // 根据 MAX_STEP 限制每帧可偏移的角度幅度
+        float dx_deg_step = std::clamp(dx_raw, -MAX_STEP * speedScale, MAX_STEP * speedScale);
+        // 将角度步进转换为鼠标位移
+        float dx_pix_step = dx_deg_step * MOUSE_SENSITIVITY;
+        smoothed_dx += (dx_pix_step - smoothed_dx) * alpha;
+        if (error_mag < 2.0f) {
+            smoothed_dx *= 0.7f;
+        }
+        float dx_fast = std::clamp(smoothed_dx, -MAX_PIXEL_MOVE_SMOOTH, MAX_PIXEL_MOVE_SMOOTH);
+        move_mouse_relative(dx_fast, 0.0f);
+        last_time = now_tp;
+    }
 }
 
 // ================== 地图加载 ==================
