@@ -67,7 +67,7 @@ namespace {
 
     constexpr float SMOOTHING_TIME = 0.13f;
     constexpr float MOUSE_SENSITIVITY = 16.0f;
-    constexpr float MAX_STEP = 1.2f;
+    constexpr float MAX_STEP = 5.0f;
 
     constexpr float PREDICTION_INTERVAL = 0.0f;
     constexpr float SPEED_CORRECTION_FACTOR = 0.0f;

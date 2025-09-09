@@ -24,7 +24,8 @@ using json = nlohmann::json;
 namespace fs = std::filesystem;
 
 static constexpr int REQUEST_TIMEOUT_MS = 10000; // 10s
-static constexpr char BASE_URL[] = "https://raw.githubusercontent.com/a2x/cs2-dumper/main/output/";
+//static constexpr char BASE_URL[] = "https://raw.githubusercontent.com/a2x/cs2-dumper/main/output/";
+static constexpr char BASE_URL[] = "";  //未更新就用本地的
 
 static const fs::path kConfigDir = fs::path("Configuration");
 static const fs::path kOffsetsPath = kConfigDir / "offsets.json";
