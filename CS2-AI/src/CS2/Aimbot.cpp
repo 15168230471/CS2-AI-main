@@ -1,4 +1,4 @@
-// CS2/Aimbot.cpp
+// CS2/Aimbot.cpp   
 #include "CS2/Aimbot.h"
 #include <Windows.h>
 #include <algorithm>
@@ -76,7 +76,7 @@ Vec2D<float> Aimbot::predictTarget(float tgtX, float tgtY) {
 }
 
 void Aimbot::update(GameInformationhandler* info_handler) {
-    
+
 
     GameInformation gi = info_handler->get_game_information();
 
@@ -149,7 +149,7 @@ void Aimbot::update(GameInformationhandler* info_handler) {
     // 正常情况：最近的敌人
     else if (gi.closest_enemy_player) {
         target_enemy = &(*gi.closest_enemy_player);
-        /*std::cout << "[Aimbot] Picked closest_enemy id=" << gi.closest_enemy_player->pawn_addr 
+        /*std::cout << "[Aimbot] Picked closest_enemy id=" << gi.closest_enemy_player->pawn_addr
             << " closest_enemy  m_enemy_fire_ticks=" << m_enemy_fire_ticks[target_enemy->pawn_addr] << std::endl;*/
     }
 

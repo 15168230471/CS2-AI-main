@@ -1,4 +1,4 @@
-// Modified MovementStrategy implementation with additional debug logging and safety checks
+// Modified MovementStrategy implementation with additional debug logging and safety checks 
 
 // Original includes and declarations
 #include "CS2/MovementStrategy.h"
@@ -17,6 +17,9 @@
 
 // 触发器标记 g_just_fired
 #include "CS2/Triggerbot.h"
+
+// 如需使用 nlohmann::json，请确保在头文件或此处包含
+#include "Utility/json.hpp"
 
 // 防止 Windows 宏污染
 #ifdef min
@@ -230,7 +233,12 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             m_delay_time = now_ms + 1200;
         }
         if (last_alive && !alive) {
+            // 玩家死亡：立即清移动并延时，避免复活后延续输入
             m_next_node = nullptr;
+            m_current_route.clear();
+            m_ban_until.clear();
+            m_prev_node_id = m_last_node_id = -1;
+            m_oscillation_streak = 0;
             m_delay_time = now_ms + 1200;
         }
         last_has_enemy = has_enemy;
@@ -294,22 +302,15 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                         m_next_node = m_current_route[1];
                     }
                     else {
+                        // 备用点也没法形成有效第二步：仅停走，不对齐敌人以避免隔墙朝敌人
                         m_next_node = nullptr;
                         game_info_handler->set_player_movement(Movement{});
-                        // 调整视角到备用目标节点
-                        try {
-                            align_view_to(gi, gi.controlled_player.head_position, alt_goal->position);
-                        }
-                        catch (const std::exception& e) {
-                            Logging::log_error(std::string("align_view_to exception: ") + e.what());
-                        }
-                        catch (...) {
-                            Logging::log_error("Unknown exception in align_view_to");
-                        }
+                        // 可选：对齐到备用路点（非敌人位置），但这里没有有效 next，保持视角不动更安全
                         m_in_update = false; return;
                     }
                 }
                 else {
+                    // 从 start 的邻居里挑一个更靠近敌人的点
                     if (!start_node->edges.empty()) {
                         std::shared_ptr<Node> best = nullptr;
                         float bestd = FLT_MAX;
@@ -328,16 +329,7 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                         }
                     }
                     if (!m_next_node) {
-                        // 调整视角到敌人位置
-                        try {
-                            align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
-                        }
-                        catch (const std::exception& e) {
-                            Logging::log_error(std::string("align_view_to exception: ") + e.what());
-                        }
-                        catch (...) {
-                            Logging::log_error("Unknown exception in align_view_to");
-                        }
+                        // 没有可用 next：仅停走，不对齐敌人
                         game_info_handler->set_player_movement(Movement{});
                         m_in_update = false; return;
                     }
@@ -347,16 +339,7 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                 m_current_route = route;
                 m_next_node = (m_current_route.size() > 1 && m_current_route[1] ? m_current_route[1] : nullptr);
                 if (!m_next_node) {
-                    // 调整视角到敌人位置
-                    try {
-                        align_view_to(gi, gi.controlled_player.head_position, enemy_pos);
-                    }
-                    catch (const std::exception& e) {
-                        Logging::log_error(std::string("align_view_to exception: ") + e.what());
-                    }
-                    catch (...) {
-                        Logging::log_error("Unknown exception in align_view_to");
-                    }
+                    // 没有可用 next：仅停走，不对齐敌人
                     game_info_handler->set_player_movement(Movement{});
                     m_in_update = false; return;
                 }
@@ -669,8 +652,6 @@ void MovementStrategy::align_view_to(
     // 平滑模式下的最大鼠标位移。为了避免平滑模式在大误差时位移过大导致抖动，这里设定为
     // 快速模式上限的四分之一，可根据实际情况微调。例如 FAST_MAX_STEP*FAST_SENSITIVITY/4 ≈ 40
     constexpr float MAX_PIXEL_MOVE_SMOOTH = (MAX_STEP * MOUSE_SENSITIVITY);
-
-    
 
     auto now_tp = SteadyClock::now();
 
