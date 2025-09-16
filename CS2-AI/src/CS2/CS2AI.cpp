@@ -17,7 +17,7 @@ void CS2Ai::update()
 	if (m_activated_behavior.aimbot)
 		m_aimbot.update(m_game_info_handler.get());
 	if (m_activated_behavior.movement)
-		m_movement_strategy.update(m_game_info_handler.get());
+		m_movement_strategy.update(m_game_info_handler.get(), &m_aimbot);
 }
 
 bool CS2Ai::load_config()

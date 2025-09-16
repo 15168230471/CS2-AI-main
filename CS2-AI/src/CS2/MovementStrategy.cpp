@@ -2,11 +2,13 @@
 
 // Original includes and declarations
 #include "CS2/MovementStrategy.h"
+#include "CS2/Aimbot.h"
 
 #include <algorithm>
 #include <filesystem>
 #include <optional>
 #include <sstream>
+#include <Windows.h>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
@@ -171,7 +173,7 @@ bool MovementStrategy::should_replan_due_to_no_progress(const Vec3D<float>& play
 }
 
 // ================ 核心：Update =================
-void MovementStrategy::update(GameInformationhandler* game_info_handler)
+void MovementStrategy::update(GameInformationhandler* game_info_handler, const Aimbot* aimbot)
 {
     // 重入保护：避免多线程/重入带来的竞态
     if (m_in_update) return;
@@ -228,10 +230,13 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
         bool has_enemy = gi.closest_enemy_player.has_value();
         bool alive = (gi.controlled_player.health > 0);
 
+        // 检测敌人状态变化
         if (last_has_enemy && !has_enemy) {
             m_next_node = nullptr;
             m_delay_time = now_ms + 1200;
         }
+        
+        // 检测死亡状态变化
         if (last_alive && !alive) {
             // 玩家死亡：立即清移动并延时，避免复活后延续输入
             m_next_node = nullptr;
@@ -241,6 +246,18 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             m_oscillation_streak = 0;
             m_delay_time = now_ms + 1200;
         }
+        
+        // 检测复活状态变化
+        if (!last_alive && alive) {
+            // 玩家复活：重置所有状态并延长延迟时间，避免复活后立即乱走
+            m_next_node = nullptr;
+            m_current_route.clear();
+            m_ban_until.clear();
+            m_prev_node_id = m_last_node_id = -1;
+            m_oscillation_streak = 0;
+            m_delay_time = now_ms + 2000; // 复活后延长延迟到2秒
+        }
+        
         last_has_enemy = has_enemy;
         last_alive = alive;
 
@@ -284,7 +301,15 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
         if (!m_next_node)
         {
             auto start_node = get_closest_node_to_position(player_pos);
-            auto end_node = get_closest_node_to_position(enemy_pos);
+            // 如果没有任何被观察到的敌人，则避免以敌人位置为目的地，改为选一个与当前视角方向最一致的邻居点
+            std::shared_ptr<Node> end_node = nullptr;
+            bool any_spotted = false;
+            for (const auto& e : gi.other_players) {
+                if (e.health > 0 && e.isSpotted) { any_spotted = true; break; }
+            }
+            if (any_spotted) {
+                end_node = get_closest_node_to_position(enemy_pos);
+            }
 
             if (!start_node) {
                 game_info_handler->set_player_movement(Movement{});
@@ -295,31 +320,43 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
             if (end_node) route = Dijkstra::get_route(start_node, end_node);
 
             if (route.size() <= 1 || (route.size() > 1 && !route[1])) {
-                auto alt_goal = pick_reachable_goal_node_fallback(enemy_pos, start_node, end_node);
-                if (alt_goal) {
-                    m_current_route = Dijkstra::get_route(start_node, alt_goal);
-                    if (m_current_route.size() > 1 && m_current_route[1]) {
-                        m_next_node = m_current_route[1];
-                    }
-                    else {
-                        // 备用点也没法形成有效第二步：仅停走，不对齐敌人以避免隔墙朝敌人
-                        m_next_node = nullptr;
-                        game_info_handler->set_player_movement(Movement{});
-                        // 可选：对齐到备用路点（非敌人位置），但这里没有有效 next，保持视角不动更安全
-                        m_in_update = false; return;
+                // 仅当存在被观察到的敌人时，才允许用“更接近敌人的候选点”作为替代目标
+                bool any_spotted_for_alt = false;
+                for (const auto& e : gi.other_players) {
+                    if (e.health > 0 && e.isSpotted) { any_spotted_for_alt = true; break; }
+                }
+
+                if (any_spotted_for_alt) {
+                    auto alt_goal = pick_reachable_goal_node_fallback(enemy_pos, start_node, end_node);
+                    if (alt_goal) {
+                        m_current_route = Dijkstra::get_route(start_node, alt_goal);
+                        if (m_current_route.size() > 1 && m_current_route[1]) {
+                            m_next_node = m_current_route[1];
+                        }
+                        else {
+                            // 备用点也没法形成有效第二步：仅停走
+                            m_next_node = nullptr;
+                            game_info_handler->set_player_movement(Movement{});
+                            m_in_update = false; return;
+                        }
                     }
                 }
-                else {
-                    // 从 start 的邻居里挑一个更靠近敌人的点
+
+                if (!m_next_node) {
+                    // 中性选择：按当前视角方向选择与视角夹角最小的邻居点
                     if (!start_node->edges.empty()) {
                         std::shared_ptr<Node> best = nullptr;
-                        float bestd = FLT_MAX;
+                        float best_angle = 1e9f;
+                        float view_yaw = norm_deg_0_360(gi.controlled_player.view_vec.y);
                         for (auto& e : start_node->edges) {
                             auto to_node = e.toNode;
-                            if (to_node) {
-                                float d = to_node->position.distance(enemy_pos);
-                                if (d < bestd) { bestd = d; best = to_node; }
-                            }
+                            if (!to_node) continue;
+                            float pos_ang = calc_angle_between_two_positions(gi.controlled_player.head_position, to_node->position);
+                            pos_ang = norm_deg_0_360(pos_ang);
+                            float d = calc_walk_angle(view_yaw, pos_ang); // [0,360]
+                            float signed_d = (d > 180.0f) ? (d - 360.0f) : d;
+                            float ad = std::fabs(signed_d);
+                            if (ad < best_angle) { best_angle = ad; best = to_node; }
                         }
                         if (best) {
                             m_current_route = Dijkstra::get_route(start_node, best);
@@ -464,28 +501,56 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler)
                 }
             }
 
-            // 视角对齐“行走目标节点”（最近敌人若 isSpotted==true，会在 align_view_to 内短路）
-            if (m_next_node) {
-                try {
-                    // Record debug info about alignment
-                    {
-                        std::ostringstream oss;
-                        oss << "[MovementStrategy] aligning view to node id=" << m_next_node->id;
-                        oss << " at (" << m_next_node->position.x << "," << m_next_node->position.y << "," << m_next_node->position.z << ")";
-                        debug_log(oss.str());
-                    }
-                    align_view_to(gi, gi.controlled_player.head_position, m_next_node->position);
-                }
-                catch (const std::exception& e) {
-                    Logging::log_error(std::string("align_view_to exception: ") + e.what());
-                }
-                catch (...) {
-                    Logging::log_error("Unknown exception in align_view_to");
-                }
-            }
         }
 
         game_info_handler->set_player_movement(mv);
+
+        // -------- 视角控制逻辑（与Aimbot协调工作）--------
+        // 检查是否有isSpotted的敌人（使用与Aimbot相同的逻辑）
+        bool has_spotted_enemy = false;
+        
+        // 检查是否有任何可见的敌人（简化逻辑，只检查isSpotted=true）
+        for (const auto& enemy : gi.other_players) {
+            if (enemy.health > 0 && enemy.isSpotted) {
+                has_spotted_enemy = true;
+                break;
+            }
+        }
+        
+        // 调试：检查视角控制条件
+        static int debug_counter = 0;
+        if (++debug_counter % 60 == 0) {  // 每秒输出一次
+            bool aimbot_scanning = (aimbot && aimbot->is_scanning_mode());
+            bool aimbot_has_target = (aimbot && gi.closest_enemy_player && gi.closest_enemy_player->isSpotted);
+            std::cout << "[MovementStrategy] Debug: has_spotted_enemy=" << has_spotted_enemy 
+                      << ", aimbot_has_target=" << aimbot_has_target
+                      << ", m_next_node=" << (m_next_node ? "exists" : "null")
+                      << ", aimbot_scanning=" << aimbot_scanning << std::endl;
+        }
+        
+        // 当没有可见敌人且Aimbot不在扫描模式时，使用完善的视角控制函数跟随移动方向
+        // 或者当Aimbot没有有效目标时（即使有可见敌人，但Aimbot认为不适合瞄准），也控制视角
+        bool aimbot_has_target = false;
+        if (aimbot && gi.closest_enemy_player && gi.closest_enemy_player->isSpotted) {
+            aimbot_has_target = true;
+        }
+        
+        if ((!has_spotted_enemy || !aimbot_has_target) && m_next_node && (!aimbot || !aimbot->is_scanning_mode())) {
+            Vec3D<float> head_pos = gi.controlled_player.head_position;
+            Vec3D<float> target_pos = m_next_node->position;
+            
+            // 调试：检查移动方向
+            static int move_debug_counter = 0;
+            if (++move_debug_counter % 60 == 0) {  // 每秒输出一次
+                float move_distance = head_pos.distance(target_pos);
+                std::cout << "[MovementStrategy] Move debug: move_distance=" << move_distance 
+                          << ", next_node_pos=(" << target_pos.x << "," << target_pos.y << "," << target_pos.z << ")"
+                          << ", head_pos=(" << head_pos.x << "," << head_pos.y << "," << head_pos.z << ")" << std::endl;
+            }
+            
+            // 使用完善的视角控制函数，支持快速和平滑两种模式
+            align_view_to(gi, head_pos, target_pos);
+        }
 
         // -------- 额外卡住检测（重点加固）--------
         static Vec3D<float> anchor_pos;
@@ -594,9 +659,8 @@ void MovementStrategy::align_view_to(
     const Vec3D<float>& from_head_pos,
     const Vec3D<float>& to_pos)
 {
-    // 入参校验：如果没有敌人或敌人已被观察到，直接返回
-    if (!gi.closest_enemy_player.has_value()) return;
-    if (gi.closest_enemy_player->isSpotted)   return;
+    // 入参校验：只在没有isSpotted=true敌人时执行视角控制
+    // 这个检查现在由调用方（MovementStrategy::update）处理
 
     if (!finite3(from_head_pos) || !finite3(to_pos)) return;
 
@@ -616,10 +680,15 @@ void MovementStrategy::align_view_to(
     if (target_yaw < 0.0f)    target_yaw += 360.0f;
 
     float current_yaw = gi.controlled_player.view_vec.y;
+    float current_pitch = gi.controlled_player.view_vec.x;
 
     float dx_raw = target_yaw - current_yaw;
     if (dx_raw > 180.0f)  dx_raw -= 360.0f;
     if (dx_raw < -180.0f) dx_raw += 360.0f;
+
+    // 计算俯仰角调整：保持水平状态（pitch = 0）
+    float target_pitch = 0.0f;
+    float dy_raw = target_pitch - current_pitch;
 
     // ---------------------------------------------------------------------------------
     // 使用借鉴自 Aimbot 的瞄准逻辑：根据误差大小在快速模式和平滑模式之间切换。
@@ -629,9 +698,10 @@ void MovementStrategy::align_view_to(
 
     float error_mag = std::fabs(dx_raw);
 
-    // 静态变量用于跨帧保存上一次更新时间和平滑后的 dx
+    // 静态变量用于跨帧保存上一次更新时间和平滑后的 dx 和 dy
     static auto last_time = SteadyClock::now();
     static float smoothed_dx = 0.0f;
+    static float smoothed_dy = 0.0f;
 
     // 快速模式阈值和参数：依据 Aimbot 的设定
     // 定义进入和退出快速模式的两个阈值：当误差位于 [FAST_ENTER_THRESHOLD, FAST_MAX_ENTER_THRESHOLD]
@@ -660,9 +730,16 @@ void MovementStrategy::align_view_to(
         float dx_l = std::clamp(dx_raw, -FAST_MAX_STEP, FAST_MAX_STEP);
         float dx_fast = dx_l * FAST_SENSITIVITY;
         dx_fast = std::clamp(dx_fast, -MAX_PIXEL_MOVE_FAST, MAX_PIXEL_MOVE_FAST);
-        move_mouse_relative(dx_fast, 0.0f);
+        
+        // 俯仰角调整：保持水平状态
+        float dy_l = std::clamp(dy_raw, -FAST_MAX_STEP, FAST_MAX_STEP);
+        float dy_fast = dy_l * FAST_SENSITIVITY;
+        dy_fast = std::clamp(dy_fast, -MAX_PIXEL_MOVE_FAST, MAX_PIXEL_MOVE_FAST);
+        
+        move_mouse_relative(dx_fast, dy_fast);
         // 重置平滑变量以避免模式切换时的跳跃
         smoothed_dx = dx_fast;
+        smoothed_dy = dy_fast;
         last_time = now_tp;
     }
     else {
@@ -680,7 +757,17 @@ void MovementStrategy::align_view_to(
             smoothed_dx *= 0.7f;
         }
         float dx_fast = std::clamp(smoothed_dx, -MAX_PIXEL_MOVE_SMOOTH, MAX_PIXEL_MOVE_SMOOTH);
-        move_mouse_relative(dx_fast, 0.0f);
+        
+        // 俯仰角平滑调整：保持水平状态
+        float dy_deg_step = std::clamp(dy_raw, -MAX_STEP * speedScale, MAX_STEP * speedScale);
+        float dy_pix_step = dy_deg_step * MOUSE_SENSITIVITY;
+        smoothed_dy += (dy_pix_step - smoothed_dy) * alpha;
+        if (std::fabs(dy_raw) < 2.0f) {
+            smoothed_dy *= 0.7f;
+        }
+        float dy_fast = std::clamp(smoothed_dy, -MAX_PIXEL_MOVE_SMOOTH, MAX_PIXEL_MOVE_SMOOTH);
+        
+        move_mouse_relative(dx_fast, dy_fast);
         last_time = now_tp;
     }
 }

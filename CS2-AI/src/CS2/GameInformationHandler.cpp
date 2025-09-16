@@ -108,7 +108,8 @@ std::optional<PlayerInformation> GameInformationhandler::get_closest_enemy(const
 	{
 		float distance = controlled_player.head_position.distance(enemy.head_position);
 
-		if ((distance <= closest_distance) &&  (enemy.health > 0))
+		// 选择最近的敌人（不限制isSpotted状态，让MovementStrategy自己判断）
+		if ((distance <= closest_distance) && (enemy.health > 0))
 		{
 			closest_distance = distance;
 			closest_enemy = enemy;

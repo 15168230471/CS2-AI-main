@@ -75,22 +75,43 @@ Vec2D<float> Aimbot::predictTarget(float tgtX, float tgtY) {
     return { predX, predY };
 }
 
+
 void Aimbot::update(GameInformationhandler* info_handler) {
 
 
     GameInformation gi = info_handler->get_game_information();
 
-    // ËÀÍö/ÖØÉúÊ±ÖØÖÃ
+    // ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½
+    // æ£€æµ‹å¤æ´»ï¼šä»æ­»äº¡çŠ¶æ€(health <= 0)åˆ°å¤æ´»çŠ¶æ€(health > 0)
+    if (m_last_health <= 0 && gi.controlled_player.health > 0 && !m_just_respawned) {
+        // åˆšå¤æ´»ï¼Œè®¾ç½®å»¶è¿Ÿ
+        m_respawn_delay_ticks = RESPAWN_DELAY_FRAMES;
+        m_just_respawned = true;
+        std::cout << "[Aimbot] Player respawned! Setting delay: " << m_respawn_delay_ticks << " ticks" << std::endl;
+    }
+    
+    // æ­»äº¡æ—¶é‡ç½®
     if (gi.controlled_player.health <= 0) {
-        m_last_health = -1;
+        m_last_health = 0; // è®¾ç½®ä¸º0è¡¨ç¤ºæ­»äº¡çŠ¶æ€
         m_injured_ticks = 0;
+        m_just_respawned = false; // é‡ç½®å¤æ´»æ ‡å¿—
+        return;
+    }
+    
+    // å¤æ´»åå»¶è¿Ÿï¼Œé¿å…ç«‹å³ç„å‡†
+    if (m_respawn_delay_ticks > 0) {
+        m_respawn_delay_ticks--;
+        static int respawn_debug_counter = 0;
+        if (++respawn_debug_counter % 60 == 0) {
+            std::cout << "[Aimbot] Respawn delay: " << m_respawn_delay_ticks << " ticks remaining" << std::endl;
+        }
         return;
     }
 
-    // ------ ¼ì²éÊÇ·ñ¸Õ¸ÕÊÜÉË ------
+    // ------ ï¿½ï¿½ï¿½ï¿½Ç·ï¿½Õ¸ï¿½ï¿½ï¿½ï¿½ï¿½ ------
     bool just_injured = false;
     if (m_last_health != -1 && gi.controlled_player.health < m_last_health) {
-        m_injured_ticks = INJURED_MEMORY_FRAMES; // Ã¿´ÎµôÑªË¢ĞÂÊÜÉË¼ÇÒä
+        m_injured_ticks = INJURED_MEMORY_FRAMES; // Ã¿ï¿½Îµï¿½ÑªË¢ï¿½ï¿½ï¿½ï¿½ï¿½Ë¼ï¿½ï¿½ï¿½
         just_injured = true;
         /*std::cout << "[Aimbot] Got injured! Injured ticks set: " << m_injured_ticks << std::endl;*/
     }
@@ -99,77 +120,113 @@ void Aimbot::update(GameInformationhandler* info_handler) {
     }
     m_last_health = gi.controlled_player.health;
 
-    // ------ Ñ°ÕÒÄ¿±ê ------
+    // ------ å—ä¼¤åå¤„ç†é€»è¾‘ ------
+    if (m_injured_ticks > 0) {
+        // å¦‚æœä¸åœ¨æ‰«ææ¨¡å¼ï¼Œå¼€å§‹æ‰«æ
+        if (!m_scanning_mode) {
+            m_scanning_mode = true;
+            m_scan_start_yaw = gi.controlled_player.view_vec.y;
+            m_scan_current_yaw = m_scan_start_yaw;
+        }
+        
+        // æ‰§è¡Œæ‰«æ
+        auto now_tp = std::chrono::steady_clock::now();
+        double now_ms = std::chrono::duration<double, std::milli>(now_tp.time_since_epoch()).count();
+        static double last_scan_time = 0.0;
+        double delta_time = now_ms - last_scan_time;
+        
+        if (delta_time >= 16.0) { // çº¦60FPS
+            float scan_step = SCAN_SPEED * (delta_time / 1000.0f);
+            m_scan_current_yaw += scan_step;
+            
+            // æ£€æŸ¥æ˜¯å¦å®Œæˆæ‰«æ
+            if (m_scan_current_yaw - m_scan_start_yaw >= SCAN_COMPLETE_ANGLE) {
+                m_scanning_mode = false;
+                m_injured_ticks = 0;
+                return;
+            }
+            
+            // è®¡ç®—ç›®æ ‡è§’åº¦
+            float target_yaw = m_scan_current_yaw;
+            if (target_yaw >= 360.0f) target_yaw -= 360.0f;
+            if (target_yaw < 0.0f) target_yaw += 360.0f;
+            
+            // è®¡ç®—å½“å‰è§’åº¦
+            float current_yaw = gi.controlled_player.view_vec.y;
+            
+            // è®¡ç®—è§’åº¦å·®
+            float dyaw = target_yaw - current_yaw;
+            if (dyaw > 180.0f) dyaw -= 360.0f;
+            if (dyaw < -180.0f) dyaw += 360.0f;
+            
+            // ç§»åŠ¨é¼ æ ‡
+            float mouse_dx = dyaw * scan_sensitivity;
+            move_mouse(mouse_dx, 0.0f);
+            
+            last_scan_time = now_ms;
+        }
+        return;
+    }
+
+    // ------ å¯»æ‰¾ç›®æ ‡ ------
+    Vec3D<float> my_head = gi.controlled_player.head_position;
     const PlayerInformation* target_enemy = nullptr;
-    float min_dist_firing = std::numeric_limits<float>::max();
-    const PlayerInformation* firing_enemy = nullptr;
 
-    for (const auto& enemy : gi.other_players) {
-        if (enemy.health <= 0) continue;
-        uintptr_t id = enemy.pawn_addr;
-
-        // ¼ÇÂ¼ shots_fired ¼ÇÒä
-        DWORD prev_shots = m_prev_enemy_shots_fired[id];
-        if (enemy.shots_fired > prev_shots || enemy.shots_fired > 0) {
-            m_enemy_fire_ticks[id] = FIRE_MEMORY_FRAMES;
-            /*if (enemy.shots_fired > prev_shots)
-                std::cout << "[Aimbot] id=" << id << " | shots_fired INCREASE! (" << prev_shots << "->" << enemy.shots_fired << "), set fire_ticks=" << FIRE_MEMORY_FRAMES << std::endl;*/
-        }
-        else if (m_enemy_fire_ticks[id] > 0) {
-            m_enemy_fire_ticks[id]--;
-        }
-        m_prev_enemy_shots_fired[id] = enemy.shots_fired;
-
-        float dist = gi.controlled_player.position.distance(enemy.position);
-
-        // ÕÒ³ö×î½üµÄÕıÔÚ¿ª»ğµĞÈË
-        if (enemy.shots_fired > 0 || m_enemy_fire_ticks[id] > 0) {
-            if (dist < min_dist_firing) {
-                min_dist_firing = dist;
-                firing_enemy = &enemy;
+    // ------ ç›®æ ‡é€‰æ‹© ------
+    // åªç„å‡†isSpottedä¸ºtrueçš„æ•Œäººï¼Œé¿å…éš”å¢™ç„äºº
+    
+    // è°ƒè¯•ï¼šæ£€æŸ¥æ•ŒäººçŠ¶æ€
+    static int debug_counter = 0;
+    if (++debug_counter % 60 == 0) {  // æ¯ç§’è¾“å‡ºä¸€æ¬¡
+        int total_enemies = 0;
+        int spotted_enemies = 0;
+        for (const auto& enemy : gi.other_players) {
+            if (enemy.health > 0) {
+                total_enemies++;
+                if (enemy.isSpotted) {
+                    spotted_enemies++;
+                }
             }
         }
-
-        //// ¿ÉÑ¡£º´òÓ¡ËùÓĞµĞÈËµÄ×´Ì¬
-        //std::cout << "[Aimbot] id=" << id
-        //    << " | shots_fired=" << enemy.shots_fired
-        //    << " | fire_ticks=" << m_enemy_fire_ticks[id]
-        //    << " | dist=" << dist
-        //    << std::endl;
+        std::cout << "[Aimbot] Total enemies: " << total_enemies 
+                  << ", Spotted enemies: " << spotted_enemies << std::endl;
     }
-
-    // ------ Ä¿±êÑ¡Ôñ ------
-    // ÓÅÏÈ£ºÊÜÉËºóµÄ¼ÇÒäÆÚÄÚ£¬¶¢×ÅÕıÔÚ¿ª»ğµÄ×î½üµĞÈË
-    if (m_injured_ticks > 0 && firing_enemy) {
-        target_enemy = firing_enemy;
-        /*std::cout << "[Aimbot] Picked firing_enemy id=" << firing_enemy->pawn_addr
-            << " (after injury), m_enemy_fire_ticks="
-            << m_enemy_fire_ticks[firing_enemy->pawn_addr] << std::endl;*/
-    }
-    // Õı³£Çé¿ö£º×î½üµÄµĞÈË
-    else if (gi.closest_enemy_player) {
+    
+    // åªé€‰æ‹©æœ€è¿‘çš„å¯è§æ•Œäººï¼ˆå¿…é¡»æ˜¯isSpotted=trueï¼‰
+    if (gi.closest_enemy_player && gi.closest_enemy_player->isSpotted) {
         target_enemy = &(*gi.closest_enemy_player);
-        /*std::cout << "[Aimbot] Picked closest_enemy id=" << gi.closest_enemy_player->pawn_addr
-            << " closest_enemy  m_enemy_fire_ticks=" << m_enemy_fire_ticks[target_enemy->pawn_addr] << std::endl;*/
+        // å‡å°‘è°ƒè¯•è¾“å‡ºé¢‘ç‡ï¼šæ¯60å¸§è¾“å‡ºä¸€æ¬¡ï¼ˆçº¦1ç§’ï¼‰
+        static int target_debug_counter = 0;
+        if (++target_debug_counter % 60 == 0) {
+            std::cout << "[Aimbot] Selected closest enemy (isSpotted=" << gi.closest_enemy_player->isSpotted << ") - ID: " << gi.closest_enemy_player->pawn_addr 
+                      << ", Health: " << gi.closest_enemy_player->health 
+                      << ", Position: (" << gi.closest_enemy_player->position.x << "," << gi.closest_enemy_player->position.y << "," << gi.closest_enemy_player->position.z << ")" << std::endl;
+        }
     }
 
-    if (!target_enemy)
+    if (!target_enemy) {
+        // å‡å°‘è°ƒè¯•è¾“å‡ºé¢‘ç‡ï¼šæ¯60å¸§è¾“å‡ºä¸€æ¬¡ï¼ˆçº¦1ç§’ï¼‰
+        static int no_target_debug_counter = 0;
+        if (++no_target_debug_counter % 60 == 0) {
+            std::cout << "[Aimbot] No valid target, returning" << std::endl;
+        }
         return;
-    // ĞÂÔö£ºÖ»ÓĞÄ¿±ê±»±ê¼ÇÎªÒÑ±©Â¶£¨IsSpotted£©²Å¼ÌĞøÃé×¼
-    if (!target_enemy->isSpotted) {
-        // Èç¹ûÏëÍêÈ«ºöÂÔÎ´±©Â¶µÄµĞÈË£¬¿ÉÒÔÖ±½Ó·µ»Ø£¬ÈÃÒÆ¶¯Ä£¿é¿ØÖÆÊÓ½Ç
-        return;
-        // Èç¹ûÏëÔÚÎ´±©Â¶Ê±ÈÃÊÓ½Ç¸úËæÂ·¾¶£¬Ò²¿ÉÒÔÔÚÕâÀïµ÷ÓÃ×Ô¶¨Òåº¯Êıµ÷ÕûÊÓ½Ç£¨¼ûµÚ4²½£©
+    }
+
+    // å‡å°‘è°ƒè¯•è¾“å‡ºé¢‘ç‡ï¼šæ¯60å¸§è¾“å‡ºä¸€æ¬¡ï¼ˆçº¦1ç§’ï¼‰
+    static int validation_debug_counter = 0;
+    if (++validation_debug_counter % 60 == 0) {
+        std::cout << "[Aimbot] Target validation passed - proceeding with aim" << std::endl;
     }
 
 
-    // Ãé×¼Âß¼­
+
+    // ï¿½ï¿½×¼ï¿½ß¼ï¿½
     float r = m_hit_head_dist(m_rng);
     Vec3D<float> enemy_target_pos = (r < PROB_HEAD)
         ? target_enemy->chest_position
         : target_enemy->position;
 
-    Vec3D<float> my_head = gi.controlled_player.head_position;
     Vec2D<float> target = calc_view_vec_aim_to_head(my_head, enemy_target_pos);
     Vec2D<float> current = gi.controlled_player.view_vec;
 
@@ -185,7 +242,7 @@ void Aimbot::update(GameInformationhandler* info_handler) {
 
 
 
-    // ·´Ó¦ÑÓ³Ù
+    // ï¿½ï¿½Ó¦ï¿½Ó³ï¿½
     if (!m_reaction_pending) {
         m_reaction_pending = true;
         m_reaction_delay_ms = m_delay_dist(m_rng);
@@ -207,7 +264,7 @@ void Aimbot::update(GameInformationhandler* info_handler) {
         return;
     }
 
-    // SMOOTH Ä£Ê½£ºÔ¤²â + ÄâÈË»¯Æ½»¬
+    // SMOOTH Ä£Ê½ï¿½ï¿½Ô¤ï¿½ï¿½ + ï¿½ï¿½ï¿½Ë»ï¿½Æ½ï¿½ï¿½
     Vec2D<float> pred = predictTarget(dy_raw, dx_raw);
     float dy_pred = pred.x;
     float dx_pred = pred.y;

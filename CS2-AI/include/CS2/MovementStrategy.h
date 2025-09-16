@@ -28,7 +28,7 @@ class MovementStrategy
 {
 public:
     // 主循环
-    void update(GameInformationhandler* game_info_handler);
+    void update(GameInformationhandler* game_info_handler, const class Aimbot* aimbot = nullptr);
 
     // 返回：是否本帧发生了加载/重载（成功或失败都返回 true）
     bool handle_navmesh_load(const std::string& map_name);

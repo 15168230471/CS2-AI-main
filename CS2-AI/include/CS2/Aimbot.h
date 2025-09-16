@@ -13,6 +13,9 @@
 class Aimbot {
 public:
     void update(GameInformationhandler* info_handler);
+    
+    // 检查是否处于扫描模式
+    bool is_scanning_mode() const { return m_scanning_mode; }
 
     
 private:
@@ -47,14 +50,24 @@ private:
     float m_prevDist = 0.0f;
     std::chrono::steady_clock::time_point m_prevTime = std::chrono::steady_clock::now();
 
+    // ===== 受伤后转视角逻辑 =====
+    bool m_scanning_mode = false;                    // 是否处于转视角模式
+    float m_scan_start_yaw = 0.0f;                   // 转视角开始时的yaw角度
+    float m_scan_current_yaw = 0.0f;                 // 当前转视角的yaw角度
+    static constexpr float SCAN_SPEED = 180.0f;      // 转视角速度（度/秒）
+    static constexpr float SCAN_COMPLETE_ANGLE = 360.0f; // 转视角完成角度
+    static constexpr float scan_sensitivity = 20.0f; // 转视角灵敏度
+
     // 在Aimbot类的private成员区加上
     int m_last_health = -1;
     int m_injured_ticks = 0;
     static constexpr int INJURED_MEMORY_FRAMES = 100;
+    
+    // 复活后延迟
+    int m_respawn_delay_ticks = 0;
+    static constexpr int RESPAWN_DELAY_FRAMES = 120; // 复活后延迟2秒（120帧）
+    bool m_just_respawned = false; // 防止重复触发复活检测
 
-    std::unordered_map<uintptr_t, int> m_enemy_fire_ticks;        // 敌人正在开火记忆
-    std::unordered_map<uintptr_t, DWORD> m_prev_enemy_shots_fired;
-    static constexpr int FIRE_MEMORY_FRAMES = 100;
 
 };
 

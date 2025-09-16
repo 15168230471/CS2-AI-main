@@ -132,6 +132,10 @@ void Triggerbot::update(GameInformationhandler* handler)
     if (!game_info.player_in_crosshair)
         return;
 
+    // 检查目标是否被观察到，避免隔墙开火
+    if (!game_info.player_in_crosshair->isSpotted)
+        return;
+
     int  targetHealth = game_info.player_in_crosshair->health;
     bool targetImmune = game_info.player_in_crosshair->isImmune;
     if (targetHealth <= 0 || targetHealth >= 200 || targetImmune)
