@@ -14,6 +14,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <random>
 
 #include "Utility/Utility.h"
 #include "Utility/Vec3D.h"
@@ -44,7 +45,7 @@ private:
     Movement calculate_move_info(const GameInformation& game_info, const std::shared_ptr<Node> node);
     float calc_angle_between_two_positions(const Vec3D<float>& pos1, const Vec3D<float>& pos2) const;
     float calc_walk_angle(float view_angle, float position_angle) const;
-    Movement get_movement_from_walking_angle(float walking_angle) const;
+    Movement get_movement_from_walking_angle(float walking_angle);
     void load_nodes(const json& json);
     void load_edges(const json& json);
     std::shared_ptr<Node> get_closest_node_to_position(const Vec3D<float>& position);
@@ -100,4 +101,11 @@ private:
 
     // === 重入保护 ===
     bool m_in_update = false;
+    
+    // === 移动随机化（反检测）===
+    std::mt19937 m_movement_rng{ std::random_device{}() };
+    std::uniform_real_distribution<float> m_movement_noise_dist{ -0.1f, 0.1f };
+    std::uniform_int_distribution<int> m_movement_pause_dist{ 0, 100 };
+    std::chrono::steady_clock::time_point m_last_movement_pause{};
+    bool m_movement_paused = false;
 };

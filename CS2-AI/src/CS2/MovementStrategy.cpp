@@ -443,9 +443,9 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler, const A
         }
 
         // -------- 执行移动（迟滞 + 步进冷却）--------
-        constexpr float ARRIVE_NEAR = 13.0f;
-        constexpr float ARRIVE_FAR = 22.0f;
-        constexpr int   STEP_SWITCH_COOLDOWN_MS = 450;
+        constexpr float ARRIVE_NEAR = 15.0f;  // 增加到达距离，减少过于精确的移动
+        constexpr float ARRIVE_FAR = 25.0f;   // 增加离开距离
+        constexpr int   STEP_SWITCH_COOLDOWN_MS = 600; // 增加切换冷却时间，减少频繁切换
 
         static int   arrive_node_id = -1;
         static bool  in_near = false;
@@ -503,17 +503,54 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler, const A
 
         }
 
+        // 添加移动随机化（反检测）
+        if (mv.forward || mv.backward || mv.left || mv.right) {
+            // 10%概率随机停止移动一帧
+            if (m_movement_pause_dist(m_movement_rng) < 10) {
+                mv = Movement{};
+            }
+            // 5%概率随机移除一个移动方向
+            else if (m_movement_pause_dist(m_movement_rng) < 5) {
+                if (mv.forward && mv.left && m_movement_pause_dist(m_movement_rng) < 50) {
+                    mv.left = false;
+                } else if (mv.forward && mv.right && m_movement_pause_dist(m_movement_rng) < 50) {
+                    mv.right = false;
+                } else if (mv.backward && mv.left && m_movement_pause_dist(m_movement_rng) < 50) {
+                    mv.left = false;
+                } else if (mv.backward && mv.right && m_movement_pause_dist(m_movement_rng) < 50) {
+                    mv.right = false;
+                }
+            }
+        }
+
         game_info_handler->set_player_movement(mv);
 
         // -------- 视角控制逻辑（与Aimbot协调工作）--------
         // 检查是否有isSpotted的敌人（使用与Aimbot相同的逻辑）
         bool has_spotted_enemy = false;
         
-        // 检查是否有任何可见的敌人（简化逻辑，只检查isSpotted=true）
-        for (const auto& enemy : gi.other_players) {
-            if (enemy.health > 0 && enemy.isSpotted) {
+        // 使用更严格的敌人检测逻辑：不仅检查isSpotted，还要检查是否在视野范围内
+        // 这样可以避免"隔墙瞄人"的问题
+        if (gi.closest_enemy_player && gi.closest_enemy_player->isSpotted && gi.closest_enemy_player->health > 0) {
+            // 计算敌人相对于玩家视角的角度差
+            Vec3D<float> my_head = gi.controlled_player.head_position;
+            Vec3D<float> enemy_pos = gi.closest_enemy_player->position;
+            Vec2D<float> current_view = gi.controlled_player.view_vec;
+            
+            // 计算指向敌人的角度
+            Vec3D<float> dir = enemy_pos - my_head;
+            float target_yaw = std::atan2(dir.y, dir.x) * 180.0f / static_cast<float>(M_PI) + 180.0f;
+            if (target_yaw >= 360.0f) target_yaw -= 360.0f;
+            if (target_yaw < 0.0f) target_yaw += 360.0f;
+            
+            // 计算角度差
+            float angle_diff = target_yaw - current_view.y;
+            if (angle_diff > 180.0f) angle_diff -= 360.0f;
+            if (angle_diff < -180.0f) angle_diff += 360.0f;
+            
+            // 只有当敌人在视野范围内（±90度）时才认为有可见敌人
+            if (std::fabs(angle_diff) <= 90.0f) {
                 has_spotted_enemy = true;
-                break;
             }
         }
         
@@ -529,13 +566,21 @@ void MovementStrategy::update(GameInformationhandler* game_info_handler, const A
         }
         
         // 当没有可见敌人且Aimbot不在扫描模式时，使用完善的视角控制函数跟随移动方向
-        // 或者当Aimbot没有有效目标时（即使有可见敌人，但Aimbot认为不适合瞄准），也控制视角
+        // 修复：优先进行移动视角控制，除非Aimbot有明确的有效目标
+        // 更准确地判断Aimbot是否真的有有效目标（不仅仅是isSpotted）
         bool aimbot_has_target = false;
         if (aimbot && gi.closest_enemy_player && gi.closest_enemy_player->isSpotted) {
-            aimbot_has_target = true;
+            // 添加更多验证条件，模拟Aimbot的目标验证逻辑
+            float distance = gi.controlled_player.head_position.distance(gi.closest_enemy_player->position);
+            if (distance > 50.0f && distance < 2000.0f && gi.closest_enemy_player->health > 0) {
+                aimbot_has_target = true;
+            }
         }
         
-        if ((!has_spotted_enemy || !aimbot_has_target) && m_next_node && (!aimbot || !aimbot->is_scanning_mode())) {
+        // 优先进行移动视角控制，除非Aimbot有明确的有效目标且不在扫描模式
+        // 这样可以避免在正常走路时突然偏转进行aimbot
+        if (m_next_node && (!aimbot || !aimbot->is_scanning_mode()) && 
+            (!has_spotted_enemy || !aimbot_has_target)) {
             Vec3D<float> head_pos = gi.controlled_player.head_position;
             Vec3D<float> target_pos = m_next_node->position;
             
@@ -923,6 +968,23 @@ Movement MovementStrategy::calculate_move_info(
     Movement stop{};
     if (!node) return stop;
 
+    // 添加移动暂停机制（反检测）
+    auto now = std::chrono::steady_clock::now();
+    if (m_movement_paused) {
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - m_last_movement_pause).count() > 50) {
+            m_movement_paused = false;
+        } else {
+            return stop; // 暂停期间不移动
+        }
+    }
+    
+    // 随机暂停（5%概率暂停50ms）
+    if (m_movement_pause_dist(m_movement_rng) < 5) {
+        m_movement_paused = true;
+        m_last_movement_pause = now;
+        return stop;
+    }
+
     const auto& head = game_info.controlled_player.head_position;
     const auto& tgt = node->position;
 
@@ -936,13 +998,53 @@ Movement MovementStrategy::calculate_move_info(
     float d = calc_walk_angle(view_yaw, pos_ang); // [0,360]
     float signed_d = (d > 180.0f) ? (d - 360.0f) : d;
 
-    if (std::fabs(signed_d) > 120.0f) {
+    // 添加角度随机化，减少过于精确的移动
+    float angle_noise = m_movement_noise_dist(m_movement_rng) * 10.0f; // ±1度随机化
+    signed_d += angle_noise;
+
+    // 提高侧移阈值，减少过于频繁的AD晃动
+    if (std::fabs(signed_d) > 150.0f) { // 进一步提高到150度
         Movement m{};
         if (signed_d > 0) m.left = true; else m.right = true;
+        
+        // 添加随机性：50%概率不进行侧移，而是停止
+        if (m_movement_pause_dist(m_movement_rng) < 50) {
+            return stop;
+        }
+        
+        // 即使进行侧移，也有20%概率只侧移很短时间
+        if (m_movement_pause_dist(m_movement_rng) < 20) {
+            // 添加短暂侧移标记
+            static auto last_short_side_move = std::chrono::steady_clock::now();
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_short_side_move).count() > 200) {
+                last_short_side_move = now;
+                return m; // 允许短暂侧移
+            } else {
+                return stop; // 侧移时间太短，停止
+            }
+        }
+        
         return m;
     }
 
-    return get_movement_from_walking_angle(d);
+    Movement result = get_movement_from_walking_angle(d);
+    
+    // 添加移动随机化：偶尔不按完美角度移动
+    if (m_movement_pause_dist(m_movement_rng) < 15) { // 15%概率
+        // 随机移除一个移动方向，让移动看起来更自然
+        if (result.forward && result.left && m_movement_pause_dist(m_movement_rng) < 50) {
+            result.left = false;
+        } else if (result.forward && result.right && m_movement_pause_dist(m_movement_rng) < 50) {
+            result.right = false;
+        } else if (result.backward && result.left && m_movement_pause_dist(m_movement_rng) < 50) {
+            result.left = false;
+        } else if (result.backward && result.right && m_movement_pause_dist(m_movement_rng) < 50) {
+            result.right = false;
+        }
+    }
+    
+    return result;
 }
 
 float MovementStrategy::calc_angle_between_two_positions(
@@ -963,18 +1065,40 @@ float MovementStrategy::calc_walk_angle(float view_angle, float pos_angle) const
     return d; // [0,360]
 }
 
-Movement MovementStrategy::get_movement_from_walking_angle(float ang) const
+Movement MovementStrategy::get_movement_from_walking_angle(float ang)
 {
     Movement m{};
+    
+    // 添加角度随机化，让移动边界不那么精确
+    float angle_noise = m_movement_noise_dist(m_movement_rng) * 5.0f; // ±0.5度随机化
+    ang += angle_noise;
+    
+    // 确保角度在有效范围内
+    if (ang < 0.0f) ang += 360.0f;
+    if (ang >= 360.0f) ang -= 360.0f;
+    
     // 0° 前、90° 左、180° 后、270° 右
-    if (ang > 337.5f || ang <= 22.5f) m.forward = true;
-    else if (ang <= 67.5f)                 m.forward = m.left = true;
-    else if (ang <= 112.5f)                m.left = true;
-    else if (ang <= 157.5f)                m.left = m.backward = true;
-    else if (ang <= 202.5f)                m.backward = true;
-    else if (ang <= 247.5f)                m.backward = m.right = true;
-    else if (ang <= 292.5f)                m.right = true;
+    // 扩大角度范围，减少过于精确的移动
+    if (ang > 340.0f || ang <= 20.0f) m.forward = true;
+    else if (ang <= 70.0f)                 m.forward = m.left = true;
+    else if (ang <= 110.0f)                m.left = true;
+    else if (ang <= 160.0f)                m.left = m.backward = true;
+    else if (ang <= 200.0f)                m.backward = true;
+    else if (ang <= 250.0f)                m.backward = m.right = true;
+    else if (ang <= 290.0f)                m.right = true;
     else                                   m.right = m.forward = true;
+    
+    // 添加随机性：偶尔不进行完美的对角线移动
+    if (m.forward && m.left && m_movement_pause_dist(m_movement_rng) < 20) {
+        m.left = false; // 20%概率只向前
+    } else if (m.forward && m.right && m_movement_pause_dist(m_movement_rng) < 20) {
+        m.right = false; // 20%概率只向前
+    } else if (m.backward && m.left && m_movement_pause_dist(m_movement_rng) < 20) {
+        m.left = false; // 20%概率只向后
+    } else if (m.backward && m.right && m_movement_pause_dist(m_movement_rng) < 20) {
+        m.right = false; // 20%概率只向后
+    }
+    
     return m;
 }
 

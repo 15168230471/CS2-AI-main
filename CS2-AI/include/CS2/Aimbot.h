@@ -71,16 +71,16 @@ private:
 
 };
 
-// 可调参数
+// 可调参数 - 已优化以提高瞄准效率
 namespace {
     constexpr float FAST_ENTER_THRESHOLD = 0.0f;
     constexpr float FAST_MAX_ENTER_THRESHOLD = 140.0f;
-    constexpr float FAST_MAX_STEP = 10.0f;
-    constexpr float FAST_SENSITIVITY = 16.0f;
+    constexpr float FAST_MAX_STEP = 15.0f;        // 提高快速模式步进
+    constexpr float FAST_SENSITIVITY = 20.0f;     // 提高快速模式灵敏度
 
-    constexpr float SMOOTHING_TIME = 0.13f;
-    constexpr float MOUSE_SENSITIVITY = 16.0f;
-    constexpr float MAX_STEP = 3.0f;
+    constexpr float SMOOTHING_TIME = 0.08f;       // 减少平滑时间，提高响应速度
+    constexpr float MOUSE_SENSITIVITY = 20.0f;    // 提高鼠标灵敏度
+    constexpr float MAX_STEP = 5.0f;              // 提高平滑模式步进
 
     constexpr float PREDICTION_INTERVAL = 0.0f;
     constexpr float SPEED_CORRECTION_FACTOR = 0.0f;

@@ -243,13 +243,14 @@ void Aimbot::update(GameInformationhandler* info_handler) {
 
 
     // ��Ӧ�ӳ�
-    if (!m_reaction_pending) {
-        m_reaction_pending = true;
-        m_reaction_delay_ms = m_delay_dist(m_rng);
-        m_reaction_start = now_ms;
-    }
-    if (now_ms - m_reaction_start < m_reaction_delay_ms)
-        return;
+    // 反应延迟已移除以提高瞄准效率
+    // if (!m_reaction_pending) {
+    //     m_reaction_pending = true;
+    //     m_reaction_delay_ms = m_delay_dist(m_rng);
+    //     m_reaction_start = now_ms;
+    // }
+    // if (now_ms - m_reaction_start < m_reaction_delay_ms)
+    //     return;
 
     // FAST ģʽ
     if (error_mag > FAST_ENTER_THRESHOLD && error_mag < FAST_MAX_ENTER_THRESHOLD) {
